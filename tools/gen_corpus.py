@@ -189,6 +189,27 @@ def emit_functions() -> list[str]:
         "void ntt3(Signed<-5>, Signed<7>) {}",
     ])
 
+    # 7) function templates: signatures mangled with T_ template-param refs,
+    #    plus dependent expression (sizeof) template arguments.
+    lines.extend([
+        "template <class T> void ft_a(T, T) {}",
+        "template void ft_a<int>(int, int);",
+        "template <class T> void ft_b(T*, const T&, T&&) {}",
+        "template void ft_b<double>(double*, const double&, double&&);",
+        "template <class T, class U> void ft_c(U, T, U, T*) {}",
+        "template void ft_c<int, char>(char, int, char, int*);",
+        "template <class T> T* ft_d(const T&) { return nullptr; }",
+        "template TopClass* ft_d<TopClass>(const TopClass&);",
+        "template <class T> void ft_e(Box<T>, T, T*) {}",
+        "template void ft_e<ns1::Inner>(Box<ns1::Inner>, ns1::Inner, ns1::Inner*);",
+        "template <class T> void ft_f(T (*)[4]) {}",
+        "template void ft_f<char>(char (*)[4]);",
+        "template <class T> void ft_g(Tag<sizeof(T)>*) {}",
+        "template void ft_g<int>(Tag<sizeof(int)>*);",
+        "template <class T> void ft_h(Tag<sizeof(T) + 1>*) {}",
+        "template void ft_h<double>(Tag<sizeof(double) + 1>*);",
+    ])
+
     return lines
 
 

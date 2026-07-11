@@ -189,6 +189,22 @@ private:
         n->memptr.pointee = pointee;
         return n;
     }
+    const Node* new_template_param(std::uint32_t index, const Node* resolved) {
+        Node* n = make_node(arena_, Kind::TemplateParam);
+        if (!n) return fail("out of memory");
+        n->tparam.index = index;
+        n->tparam.resolved = resolved;
+        return n;
+    }
+    const Node* new_expr(StringView op, const Node* const* operands,
+                         std::uint32_t noperands) {
+        Node* n = make_node(arena_, Kind::Expression);
+        if (!n) return fail("out of memory");
+        n->expr.op = op;
+        n->expr.operands = operands;
+        n->expr.noperands = noperands;
+        return n;
+    }
 
     // Copy a scratch pointer list into a stable arena array (nullptr if empty).
     const Node* const* dup(const Vec<const Node*>& v) {
@@ -214,6 +230,13 @@ private:
         StringView this_quals = pending_cv_;
         char ref_qual = pending_ref_;
         if (at_end()) return name;  // data name (no bare-function-type)
+
+        // A function template's signature (return type + params) references its
+        // template arguments via T_/T<n>_; expose them so those resolve.
+        if (name->kind == Kind::TemplateId) {
+            cur_targs_ = name->tmpl.args;
+            cur_ntargs_ = name->tmpl.nargs;
+        }
 
         const Node* ret = nullptr;
         if (name->kind == Kind::TemplateId) {
@@ -267,12 +290,10 @@ private:
         if (!base) return nullptr;
         const Node* qn = new_qual1(base);
         if (!qn) return nullptr;
-        // An unscoped <unqualified-name> at encoding level is NOT a substitution
-        // candidate; only an <unscoped-template-name> (before its args) is.
-        if (peek() == 'I') {
-            if (!add_sub(qn)) return nullptr;
-            return template_wrap(qn);
-        }
+        // At encoding level neither an unscoped name nor an unscoped-template
+        // *name* is a substitution; for a function template only the template-id
+        // is (added by template_wrap), matching g++ (S_ == the template-id).
+        if (peek() == 'I') return template_wrap(qn);
         return qn;
     }
 
@@ -411,9 +432,17 @@ private:
         return dup(args);
     }
 
-    // A template argument is a type or an <expr-primary> literal (L <type> v E).
+    // A template argument is a type, an <expr-primary> literal (L..E), or an
+    // expression (X <expression> E).
     const Node* parse_template_arg() {
         if (peek() == 'L') return parse_literal();
+        if (peek() == 'X') {
+            take();
+            const Node* e = parse_expression();
+            if (!e) return nullptr;
+            expect('E');
+            return failed_ ? nullptr : e;
+        }
         return parse_type();
     }
 
@@ -472,6 +501,7 @@ private:
             return add_sub(new_ref(Kind::RValueRef, inner));
         }
         if (c == 'A') return parse_array();
+        if (c == 'T') return parse_template_param();
         if (c == 'F') return parse_function_type();
         if (c == 'M') {
             take();
@@ -563,6 +593,99 @@ private:
         return add_sub(new_function_type(ret, arr, np));
     }
 
+    // <template-param> ::= T_ | T <number> _   (T_ == arg 0, T0_ == arg 1, ...)
+    // Substitutable; resolved against the enclosing template's args for rendering.
+    const Node* parse_template_param() {
+        expect('T');
+        if (failed_) return nullptr;
+        std::uint32_t index = 0;
+        if (peek() == '_') {
+            take();
+        } else {
+            std::uint32_t start = i_;
+            while (peek() != '_') {
+                if (at_end()) return fail("unterminated template-param");
+                take();
+            }
+            index = detail::from_base36(StringView{s_ + start, i_ - start}) + 1;
+            take();  // consume '_'
+        }
+        const Node* resolved =
+            index < cur_ntargs_ ? cur_targs_[index] : nullptr;
+        return add_sub(new_template_param(index, resolved));
+    }
+
+    // <expression>: the common dependent forms. Operands may be types or
+    // sub-expressions. Anything unrecognized fails cleanly (no assumptions).
+    const Node* parse_expression() {
+        char c = peek();
+        if (c == 'L') return parse_literal();
+        if (c == 'T') return parse_template_param();
+        if (c == 's' && peek2() == 't') return parse_expr_op("st", 1, /*type0=*/true);
+        if (c == 's' && peek2() == 'z') return parse_expr_op("sz", 1, false);
+        if (c == 'a' && peek2() == 't') return parse_expr_op("at", 1, true);
+        if (c == 'a' && peek2() == 'z') return parse_expr_op("az", 1, false);
+        if (c == 't' && peek2() == 'l') return parse_expr_list("tl", /*type0=*/true);
+        if (c == 'i' && peek2() == 'l') return parse_expr_list("il", false);
+        if (c == 'c' && peek2() == 'l') return parse_expr_list("cl", false);
+        // operators (arithmetic/logical/comparison/...): fixed arity.
+        int arity = expr_operator_arity(c, peek2());
+        if (arity > 0) {
+            StringView op{s_ + i_, 2};
+            i_ += 2;
+            Vec<const Node*> ops;
+            for (int k = 0; k < arity; ++k) {
+                const Node* e = parse_expression();
+                if (!e) return nullptr;
+                ops.push(e);
+            }
+            if (ops.failed()) return fail("out of memory");
+            return new_expr(op, dup(ops), ops.size());
+        }
+        // Fallback: a bare <type> can appear as an operand (e.g. under a cast).
+        return parse_type();
+    }
+
+    // Fixed-arity operator: 1 leading type or expression operand.
+    const Node* parse_expr_op(const char* code, int n, bool type0) {
+        StringView op{s_ + i_, 2};
+        i_ += 2;
+        (void)code;
+        Vec<const Node*> ops;
+        const Node* first = type0 ? parse_type() : parse_expression();
+        if (!first) return nullptr;
+        ops.push(first);
+        for (int k = 1; k < n; ++k) {
+            const Node* e = parse_expression();
+            if (!e) return nullptr;
+            ops.push(e);
+        }
+        if (ops.failed()) return fail("out of memory");
+        return new_expr(op, dup(ops), ops.size());
+    }
+
+    // <op> [<type>] <expression>* E   (tl/il/cl and similar list forms).
+    const Node* parse_expr_list(const char* code, bool type0) {
+        StringView op{s_ + i_, 2};
+        i_ += 2;
+        (void)code;
+        Vec<const Node*> ops;
+        if (type0) {
+            const Node* t = parse_type();
+            if (!t) return nullptr;
+            ops.push(t);
+        }
+        while (peek() != 'E') {
+            if (at_end()) return fail("unterminated expression list");
+            const Node* e = parse_expression();
+            if (!e) return nullptr;
+            ops.push(e);
+        }
+        expect('E');
+        if (failed_ || ops.failed()) return nullptr;
+        return new_expr(op, dup(ops), ops.size());
+    }
+
     const Node* parse_substitution() {
         expect('S');
         if (failed_) return nullptr;
@@ -596,6 +719,10 @@ private:
     // successful return of parse_nested_name and read by parse_encoding.
     StringView pending_cv_{};
     char pending_ref_ = 0;
+    // The enclosing function template's arguments, so T_/T<n>_ in the signature
+    // resolve to concrete types for rendering.
+    const Node* const* cur_targs_ = nullptr;
+    std::uint32_t cur_ntargs_ = 0;
 };
 
 // Convenience: parse `mangled` (length `len`) into `arena`.

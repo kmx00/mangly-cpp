@@ -97,7 +97,7 @@ private:
         if (node->kind == Kind::TemplateId &&
             node->tmpl.name->kind == Kind::QualifiedName &&
             node->tmpl.name->qual.nparts == 1) {
-            mangle_template_id(node);  // <unscoped-template-name><args>, no N...E
+            mangle_template_id(node, /*sub_name=*/false);  // no N...E, name not subbed
             return;
         }
         out_.push('N');
@@ -186,10 +186,16 @@ private:
         }
     }
 
-    void mangle_template_id(const Node* t) {
+    void mangle_template_id(const Node* t, bool sub_name = true) {
         if (failed_) return;
         if (try_sub(t)) return;
-        mangle_name_body(t->tmpl.name);  // template-prefix (registers its subs)
+        const Node* nm = t->tmpl.name;
+        if (!sub_name && nm->kind == Kind::QualifiedName && nm->qual.nparts == 1) {
+            // Top-level function-template name: bare, not a substitution.
+            mangle_prefix_part(nm->qual.parts[0]);
+        } else {
+            mangle_name_body(nm);  // registers prefix / template-prefix / name
+        }
         out_.push('I');
         for (std::uint32_t i = 0; i < t->tmpl.nargs; ++i) {
             mangle_type(t->tmpl.args[i]);
@@ -209,6 +215,12 @@ private:
             out_.push('L');
             mangle_type(node->literal.type);
             out_.append(node->literal.value);
+            out_.push('E');
+            return;
+        }
+        if (node->kind == Kind::Expression) {  // template-arg expression: X..E
+            out_.push('X');
+            mangle_expression(node);
             out_.push('E');
             return;
         }
@@ -282,9 +294,39 @@ private:
                 mangle_type(node->memptr.pointee);
                 add_sub(node);
                 return;
+            case Kind::TemplateParam:
+                out_.push('T');
+                if (node->tparam.index) append_base36(node->tparam.index - 1);
+                out_.push('_');
+                add_sub(node);  // template-params are substitutable
+                return;
             default:
                 fail();
                 return;
+        }
+    }
+
+    // Emit an expression body (no surrounding X..E). Operators/st/sz are fixed
+    // arity; tl/il/cl are E-terminated.
+    void mangle_expression(const Node* e) {
+        if (failed_) return;
+        out_.append(e->expr.op);
+        for (std::uint32_t i = 0; i < e->expr.noperands; ++i) {
+            mangle_operand(e->expr.operands[i]);
+        }
+        StringView op = e->expr.op;
+        bool e_terminated =
+            op.size == 2 && ((op.data[0] == 't' && op.data[1] == 'l') ||
+                             (op.data[0] == 'i' && op.data[1] == 'l') ||
+                             (op.data[0] == 'c' && op.data[1] == 'l'));
+        if (e_terminated) out_.push('E');
+    }
+
+    void mangle_operand(const Node* n) {
+        if (n->kind == Kind::Expression) {
+            mangle_expression(n);
+        } else {
+            mangle_type(n);
         }
     }
 

@@ -37,6 +37,8 @@ enum class Kind : std::uint8_t {
     OperatorName,   // operator symbol (e.g. "pl"); `type` set for "cv"
     CtorDtor,       // C1/C2/C3 or D0/D1/D2
     Literal,        // L <type> <value> E  (non-type template argument)
+    TemplateParam,  // T_ / T<n>_  (references a template argument)
+    Expression,     // X <expression> E  (dependent template argument)
 };
 
 struct Node {
@@ -98,6 +100,15 @@ struct Node {
             const Node* type;
             StringView value;  // literal value text, verbatim
         } literal;
+        struct {
+            std::uint32_t index;   // 0 == T_, 1 == T0_, ...
+            const Node* resolved;  // the referenced template argument (for rendering)
+        } tparam;
+        struct {
+            StringView op;              // ABI code: operator ("pl") or "st"/"tl"/...
+            const Node* const* operands;
+            std::uint32_t noperands;    // operands may be types or sub-expressions
+        } expr;
     };
 };
 
@@ -223,9 +234,40 @@ inline bool is_operator_code(char a, char b) {
     return (a == 'c' && b == 'v') || (a == 'l' && b == 'i');
 }
 
+// Arity of a 2-char operator code in <expression> context (0 if not one).
+inline int expr_operator_arity(char a, char b) {
+    if (a == 'q' && b == 'u') return 3;  // ternary ?:
+    switch (a) {  // unary operators
+        case 'p': if (b == 's' || b == 'p') return 1; break;  // +x, ++x
+        case 'n': if (b == 'g' || b == 't') return 1; break;  // -x, !x
+        case 'a': if (b == 'd') return 1; break;              // &x
+        case 'd': if (b == 'e') return 1; break;              // *x
+        case 'c': if (b == 'o') return 1; break;              // ~x
+        case 'm': if (b == 'm') return 1; break;              // --x
+        default: break;
+    }
+    switch (a) {  // binary operators
+        case 'p': if (b == 'l' || b == 'L' || b == 'm' || b == 't') return 2; break;
+        case 'm': if (b == 'i' || b == 'l' || b == 'I' || b == 'L') return 2; break;
+        case 'd': if (b == 'v' || b == 'V') return 2; break;
+        case 'r': if (b == 'm' || b == 'M' || b == 's' || b == 'S') return 2; break;
+        case 'a': if (b == 'n' || b == 'N' || b == 'S' || b == 'a') return 2; break;
+        case 'o': if (b == 'r' || b == 'R' || b == 'o') return 2; break;
+        case 'e': if (b == 'o' || b == 'O' || b == 'q') return 2; break;
+        case 'l': if (b == 's' || b == 'S' || b == 't' || b == 'e') return 2; break;
+        case 'g': if (b == 't' || b == 'e') return 2; break;
+        case 'n': if (b == 'e') return 2; break;
+        case 's': if (b == 's') return 2; break;
+        case 'c': if (b == 'm') return 2; break;
+        default: break;
+    }
+    return 0;
+}
+
 // ---------------------------------------------------------------------- render
 
-inline void render(const Node* n, OutputBuffer& o);  // forward declaration
+inline void render(const Node* n, OutputBuffer& o);       // forward declaration
+inline void render_expr(const Node* n, OutputBuffer& o);  // forward declaration
 
 // Render the bare class identifier of `p` (used to name a ctor/dtor): a source
 // name directly, a template-id / qualified-name via its base identifier.
@@ -403,7 +445,107 @@ inline void render(const Node* n, OutputBuffer& o) {
             }
             return;
         }
+        case Kind::TemplateParam:
+            if (n->tparam.resolved) {
+                render(n->tparam.resolved, o);
+            } else {  // unresolved: emit the ABI spelling
+                o.push('T');
+                if (n->tparam.index) o.append_uint(n->tparam.index - 1);
+                o.push('_');
+            }
+            return;
+        case Kind::Expression:
+            render_expr(n, o);
+            return;
     }
+}
+
+// Render a dependent expression (a template argument written as X<expr>E).
+// Style is readable and parenthesized; it is not required to match c++filt.
+inline void render_expr(const Node* n, OutputBuffer& o) {
+    StringView op = n->expr.op;
+    const Node* const* a = n->expr.operands;
+    std::uint32_t k = n->expr.noperands;
+    auto is = [&](const char* s) {
+        std::uint32_t m = static_cast<std::uint32_t>(std::strlen(s));
+        return op.size == m && std::memcmp(op.data, s, m) == 0;
+    };
+    if ((is("st") || is("sz")) && k >= 1) {  // sizeof type / expr
+        o.append("sizeof (");
+        render(a[0], o);
+        o.push(')');
+        return;
+    }
+    if ((is("at") || is("az")) && k >= 1) {  // alignof type / expr
+        o.append("alignof (");
+        render(a[0], o);
+        o.push(')');
+        return;
+    }
+    if (is("tl") && k >= 1) {  // T{ args }
+        render(a[0], o);
+        o.push('{');
+        for (std::uint32_t i = 1; i < k; ++i) {
+            if (i > 1) o.push(',');
+            render(a[i], o);
+        }
+        o.push('}');
+        return;
+    }
+    if (is("il")) {  // { args }
+        o.push('{');
+        for (std::uint32_t i = 0; i < k; ++i) {
+            if (i) o.push(',');
+            render(a[i], o);
+        }
+        o.push('}');
+        return;
+    }
+    if (is("cl") && k >= 1) {  // callee(args)
+        render(a[0], o);
+        o.push('(');
+        for (std::uint32_t i = 1; i < k; ++i) {
+            if (i > 1) o.push(',');
+            render(a[i], o);
+        }
+        o.push(')');
+        return;
+    }
+    const char* sym = operator_symbol(op);
+    if (sym && k == 3) {  // ternary (qu)
+        o.push('(');
+        render(a[0], o);
+        o.append(") ? (");
+        render(a[1], o);
+        o.append(") : (");
+        render(a[2], o);
+        o.push(')');
+        return;
+    }
+    if (sym && k == 2) {  // binary
+        o.push('(');
+        render(a[0], o);
+        o.push(')');
+        o.append(sym);
+        o.push('(');
+        render(a[1], o);
+        o.push(')');
+        return;
+    }
+    if (sym && k == 1) {  // unary (prefix)
+        o.append(sym);
+        o.push('(');
+        render(a[0], o);
+        o.push(')');
+        return;
+    }
+    // Fallback: emit the raw op then operands, so nothing crashes.
+    o.append(op);
+    for (std::uint32_t i = 0; i < k; ++i) {
+        o.push(i ? ',' : '(');
+        render(a[i], o);
+    }
+    if (k) o.push(')');
 }
 
 // ------------------------------------------------------------ structural equality
@@ -486,6 +628,18 @@ inline bool structurally_equal(const Node* a, const Node* b) {
         case Kind::Literal:
             return sv_equal(a->literal.value, b->literal.value) &&
                    structurally_equal(a->literal.type, b->literal.type);
+        case Kind::TemplateParam:
+            return a->tparam.index == b->tparam.index;
+        case Kind::Expression: {
+            if (a->expr.noperands != b->expr.noperands) return false;
+            if (!sv_equal(a->expr.op, b->expr.op)) return false;
+            for (std::uint32_t i = 0; i < a->expr.noperands; ++i) {
+                if (!structurally_equal(a->expr.operands[i], b->expr.operands[i])) {
+                    return false;
+                }
+            }
+            return true;
+        }
     }
     return false;
 }

@@ -26,6 +26,14 @@ const std::pair<const char*, const char*> kCases[] = {
     {"_ZN3opsli4_numEy", "ops::operator\"\" _num(unsigned long long)"},
     {"_ZNK3ops3NumcvbEv", "ops::Num::operator bool() const"},
     {"_ZNK3ops3NumplERKS0_", "ops::Num::operator+(ops::Num const &) const"},
+    // function templates: signatures mangled with T_/T<n>_ (resolved to args)
+    {"_Z4ft_aIiEvT_S0_", "ft_a<int>(int,int)"},
+    {"_Z4ft_cIicEvT0_T_S0_PS1_", "ft_c<int,char>(char,int,char,int *)"},
+    {"_Z4ft_fIcEvPA4_T_", "ft_f<char>(char (*)[4])"},
+    // dependent expression template arguments (sizeof, binary op)
+    {"_Z4ft_gIiEvP3TagIXstT_EE", "ft_g<int>(Tag<sizeof (int)> *)"},
+    {"_Z4ft_hIdEvP3TagIXplstT_Li1EEE",
+     "ft_h<double>(Tag<(sizeof (double))+(1)> *)"},
 };
 }  // namespace
 
