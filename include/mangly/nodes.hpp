@@ -304,7 +304,7 @@ inline int expr_operator_arity(char a, char b) {
         case 'p': if (b == 's' || b == 'p') return 1; break;  // +x, ++x
         case 'n': if (b == 'g' || b == 't') return 1; break;  // -x, !x
         case 'a': if (b == 'd') return 1; break;              // &x
-        case 'd': if (b == 'e') return 1; break;              // *x
+        case 'd': if (b == 'e' || b == 'l' || b == 'a') return 1; break;  // *x, delete
         case 'c': if (b == 'o') return 1; break;              // ~x
         case 'm': if (b == 'm') return 1; break;              // --x
         default: break;
@@ -734,6 +734,16 @@ inline void render_expr(const Node* n, OutputBuffer& o) {
     if (is("sp") && k >= 1) {  // pack expansion in an expression: expr...
         render(a[0], o);
         o.append("...");
+        return;
+    }
+    if ((is("dl") || is("da")) && k >= 1) {  // delete expr / delete[] expr
+        o.append(is("da") ? "delete[] " : "delete ");
+        render(a[0], o);
+        return;
+    }
+    if (is("gs") && k >= 1) {  // global scope: ::new / ::delete / ::name
+        o.append("::");
+        render(a[0], o);
         return;
     }
     if ((is("nw") || is("na")) && k >= 1) {  // new T / new[] T (+ initializer)
