@@ -71,6 +71,19 @@ public:
             take();  // 'V'
             const Node* inner = parse_name();  // often a local-name
             node = inner ? new_special(make_sv("GV"), StringView{}, inner) : nullptr;
+        } else if (peek() == 'G' && peek2() == 'R') {  // reference temporary
+            take();  // 'G'
+            take();  // 'R'
+            const Node* inner = parse_name();
+            if (!inner) return nullptr;
+            std::uint32_t ss = i_;
+            while (peek() != '_') {
+                if (at_end()) return fail("unterminated reference temporary");
+                take();
+            }
+            StringView seq{s_ + ss, i_ - ss};
+            take();  // '_'
+            node = new_special(make_sv("GR"), seq, inner);
         } else {
             node = parse_encoding();
         }
@@ -191,6 +204,8 @@ private:
         n->func_type.ret = ret;
         n->func_type.params = params;
         n->func_type.nparams = nparams;
+        n->func_type.except = StringView{};
+        n->func_type.except_expr = nullptr;
         return n;
     }
     const Node* new_member_pointer(const Node* cls, const Node* pointee) {
@@ -765,6 +780,25 @@ private:
         if (c == 'N') return parse_nested_name(/*as_type=*/true);
         if (c == 'Z') return add_sub(parse_local_name());  // local-name as a type
         if (c == 'S') {
+            // St <unqualified-name> is an unscoped std:: name (e.g. St6vector),
+            // distinct from the bare `St` namespace or an S_ back-reference.
+            char d = (i_ + 2 < n_) ? s_[i_ + 2] : '\0';
+            if (peek2() == 't' && detail::is_digit(d)) {
+                i_ += 2;  // consume "St"
+                const Node* comp = parse_unqualified_name();
+                if (!comp) return nullptr;
+                const Node** arr = arena_.alloc<const Node*>(2);
+                if (!arr) return fail("out of memory");
+                arr[0] = new_source(make_sv("std"));
+                arr[1] = comp;
+                const Node* qn = new_qual(arr, 2);
+                if (!qn) return nullptr;
+                if (peek() == 'I') {
+                    if (!add_sub(qn)) return nullptr;  // std::X template-prefix
+                    return template_wrap(qn);
+                }
+                return add_sub(qn);  // bare std::X class type
+            }
             const Node* base = parse_substitution();
             if (!base) return nullptr;
             if (peek() == 'I') return template_wrap(base);
@@ -778,6 +812,29 @@ private:
             const Node* pattern = parse_type();
             if (!pattern) return nullptr;
             return add_sub(new_pack_expansion(pattern));
+        }
+        if (c == 'D' && peek2() == 'o') {  // noexcept exception-spec: Do F..E
+            i_ += 2;
+            const Node* ft = parse_type();
+            if (!ft) return nullptr;
+            if (ft->kind == Kind::FunctionType) {
+                const_cast<Node*>(ft)->func_type.except = make_sv("Do");
+            }
+            return ft;
+        }
+        if (c == 'D' && peek2() == 'O') {  // dependent noexcept: DO <expr> E F..E
+            i_ += 2;
+            const Node* e = parse_expression();
+            if (!e) return nullptr;
+            expect('E');
+            if (failed_) return nullptr;
+            const Node* ft = parse_type();
+            if (!ft) return nullptr;
+            if (ft->kind == Kind::FunctionType) {
+                const_cast<Node*>(ft)->func_type.except = make_sv("DO");
+                const_cast<Node*>(ft)->func_type.except_expr = e;
+            }
+            return ft;
         }
         if (c == 'D' && peek2() == 'v') {  // vector type: Dv <num> _ <type>
             i_ += 2;

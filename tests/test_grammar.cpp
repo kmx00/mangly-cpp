@@ -80,6 +80,11 @@ const std::pair<const char*, const char*> kCases[] = {
     {"_Z1qIiEvP3TagIXdafp_EE", "q<int>(Tag<delete[] {parm#1}> *)"},
     {"_Z1rIiEvP3TagIXgsnw_T_EEE", "r<int>(Tag<::new int> *)"},
     {"_Z1sIiEvP3TagIXgsdlfp_EE", "s<int>(Tag<::delete {parm#1}> *)"},
+    // std:: substitutions, C++17 noexcept function types, reference temporary
+    {"_Z8take_vecSt6vectorIiSaIiEE", "take_vec(std::vector<int,std::allocator<int> >)"},
+    {"_Z7take_nePDoFvvE", "take_ne(void (*)() noexcept)"},
+    {"_Z3tfnIiEvPDoFT_vE", "tfn<int>(int (*)() noexcept)"},
+    {"_ZGR8ref_temp_", "reference temporary #0 for ref_temp"},
 };
 }  // namespace
 

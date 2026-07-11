@@ -114,15 +114,16 @@ unchanged.
 - Grammar covered: essentially the full Itanium `<encoding>` surface emitted by
   g++/clang -- nested names, all template-argument forms (type/literal/dependent-
   expression/pack), builtins, vendor & vector types, pointer/reference/rvalue-
-  reference/array/cv/function/member-pointer types, operator and ctor/dtor names,
-  template parameters, special names (vtable/VTT/typeinfo/construction-vtable/
-  thunks), `decltype`, local names, guard variables, lambda/unnamed closures,
-  function-parameter and fold expressions, variadic packs (`sizeof...`), abi-tags,
-  member-access/cast/named-cast/`new`/`delete`/scope-resolution expressions, the
-  global-scope (`::`) prefix, pointer and function-pointer non-type template
-  arguments, and substitutions. Not handled: `typeid`/`noexcept` expressions
-  (which g++ itself cannot mangle, so they never occur in its output) and unusual
-  vendor extensions.
+  reference/array/cv/function/member-pointer types, C++17 noexcept function types,
+  operator and ctor/dtor names, template parameters, special names (vtable/VTT/
+  typeinfo/construction-vtable/thunks/reference-temporaries), `decltype`, local
+  names, guard variables, lambda/unnamed closures, function-parameter and fold
+  expressions, variadic packs (`sizeof...`), abi-tags, member-access/cast/named-
+  cast/`new`/`delete`/scope-resolution expressions, the global-scope (`::`) prefix,
+  pointer and function-pointer non-type template arguments, `std::` abbreviations
+  (`St`/`Sa`/`Ss`/...), and substitutions. Not handled: `typeid`/`noexcept`
+  expressions (which g++ itself cannot mangle, so they never occur in its output)
+  and unusual vendor extensions.
 - The template return type is parsed but intentionally not rendered (matches the
   source tool: template functions drop the leading return type).
 - Array element spacing is presentation-only and follows the source tool:
