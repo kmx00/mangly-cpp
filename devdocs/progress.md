@@ -18,7 +18,7 @@
       (not `N...E`); non-canonical `N...E` normalizes on remangle
 - [x] generated ground-truth corpus: `tools/gen_corpus.py` compiles weird-but-
       legal signatures with a real Itanium compiler and extracts `nm` symbols to
-      `tests/corpus.txt`; every symbol parses + re-mangles byte-exact (370 syms)
+      `tests/corpus.txt`; every symbol parses + re-mangles byte-exact (377 syms)
 - [x] broadened grammar (all validated byte-exact via the corpus):
   - [x] operator names (full table incl. `cv` conversion, `li` literal)
   - [x] constructor/destructor names (`C1/C2`, `D1/D2`)
@@ -39,6 +39,9 @@
   - [x] **local names** (`Z <encoding> E <entity>` + discriminators), **guard
         variables** (`GV`), **lambda/unnamed closure types** (`Ul..E.._`/`Ut.._`),
         and **function-parameter expressions** (`fp_`)
+  - [x] **variadic templates**: pack expansion (`Dp`), argument packs (`J..E`),
+        `sizeof...` (`sZ`); **abi-tags** (`B`); expression **member access**
+        (`dt`/`pt`) and **casts** (`cv`)
 - [x] `mangly` CLI (args/stdin; `-r/--remangle`), cstdlib I/O
 - [x] pure-C++ test harness (no framework dep); builds+passes on MSVC and g++
 
@@ -47,10 +50,12 @@
   builtins, pointer/reference/array/cv types, function types, pointer-to-member,
   operator and ctor/dtor names, template parameters, special names (vtable/
   typeinfo/typeinfo-name/VTT/thunks), decltype, local names, guard variables,
-  lambda/unnamed closures, function-parameter expressions, substitutions.
-- NOT yet: pack expansion (`Dp`/`sZ`), vendor-extended types (`u`), abi-tags
-  (`B`), and the rest of the `<expression>` grammar (casts, `sr`, member access
-  `dt`/`pt`, folds).
+  lambda/unnamed closures, function-parameter expressions, variadic packs
+  (`Dp`/`J`/`sZ`), abi-tags, member-access & cast expressions, substitutions.
+- NOT yet: vendor-extended types (`u`), fold expressions (`fl`/`fr`), and a few
+  rarer `<expression>` forms (scope-resolution `sr`, new/delete, typeid).
+  Pattern pack-expansion (e.g. `Dp P T_`) and `sizeof...` render approximately
+  (byte-exact remangle is unaffected).
 - Template return type parsed but not rendered; array element spacing is
   presentation-only (`Elem[]` for a substitution element, `Elem []` otherwise).
 

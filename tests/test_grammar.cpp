@@ -51,6 +51,14 @@ const std::pair<const char*, const char*> kCases[] = {
      "use_lambda()::{lambda(int)#1}::operator()(int) const"},
     {"_Z6invokeIZ10use_lambdavEUliE_EDTclfp_Li0EEET_",
      "invoke<use_lambda()::{lambda(int)#1}>(use_lambda()::{lambda(int)#1})"},
+    // variadic templates (pack expansion / argument packs), abi-tags, casts
+    {"_Z8variadicIJicdEEvDpT_", "variadic<int, char, double>(int, char, double)"},
+    {"_Z11make_taggedB4tag1v", "make_tagged[abi:tag1]()"},
+    {"_Z9tagged_fnB2v2i", "tagged_fn[abi:v2](int)"},
+    {"_Z7castargIdEvP3TagIXcvistT_EE",
+     "castarg<double>(Tag<(int)(sizeof (double))> *)"},
+    {"_Z9countpackIJicEEvP3TagIXsZT_EE",
+     "countpack<int, char>(Tag<sizeof...(int, char)> *)"},
 };
 }  // namespace
 

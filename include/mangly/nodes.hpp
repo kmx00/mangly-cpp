@@ -44,6 +44,9 @@ enum class Kind : std::uint8_t {
     LocalName,      // Z <encoding> E <entity> [<discriminator>]
     Closure,        // Ul <types> E <num>_ (lambda) / Ut <num>_ (unnamed type)
     FuncParam,      // fp_ / fp<n>_  (function parameter, in expressions)
+    Pack,           // J <template-args> E  (argument pack)
+    PackExpansion,  // Dp <type>  (pack expansion pattern)
+    AbiTag,         // <name> B <source-name>  (abi tag)
 };
 
 struct Node {
@@ -137,6 +140,17 @@ struct Node {
         struct {
             StringView num;  // fp<num>_ (empty == parameter 0)
         } fparam;
+        struct {
+            const Node* const* elems;
+            std::uint32_t nelems;
+        } pack;
+        struct {
+            const Node* pattern;
+        } pack_exp;
+        struct {
+            const Node* inner;
+            StringView tag;
+        } abitag;
     };
 };
 
@@ -554,6 +568,23 @@ inline void render(const Node* n, OutputBuffer& o) {
             o.push('}');
             return;
         }
+        case Kind::Pack:
+            for (std::uint32_t i = 0; i < n->pack.nelems; ++i) {
+                if (i) o.append(", ");
+                render(n->pack.elems[i], o);
+            }
+            return;
+        case Kind::PackExpansion:
+            // Approximation: render the pattern; a bare pack param expands to its
+            // comma-separated elements, patterns render once.
+            render(n->pack_exp.pattern, o);
+            return;
+        case Kind::AbiTag:
+            render(n->abitag.inner, o);
+            o.append("[abi:");
+            o.append(n->abitag.tag);
+            o.push(']');
+            return;
     }
 }
 
@@ -567,6 +598,26 @@ inline void render_expr(const Node* n, OutputBuffer& o) {
         std::uint32_t m = static_cast<std::uint32_t>(std::strlen(s));
         return op.size == m && std::memcmp(op.data, s, m) == 0;
     };
+    if (is("sZ") && k >= 1) {  // sizeof...(pack)
+        o.append("sizeof...(");
+        render(a[0], o);
+        o.push(')');
+        return;
+    }
+    if (is("cv") && k >= 2) {  // cast: (type)(expr)
+        o.push('(');
+        render(a[0], o);
+        o.append(")(");
+        render(a[1], o);
+        o.push(')');
+        return;
+    }
+    if ((is("dt") || is("pt")) && k >= 2) {  // member access: a.b / a->b
+        render(a[0], o);
+        o.append(is("dt") ? "." : "->");
+        render(a[1], o);
+        return;
+    }
     if ((is("st") || is("sz")) && k >= 1) {  // sizeof type / expr
         o.append("sizeof (");
         render(a[0], o);
@@ -761,6 +812,20 @@ inline bool structurally_equal(const Node* a, const Node* b) {
         }
         case Kind::FuncParam:
             return sv_equal(a->fparam.num, b->fparam.num);
+        case Kind::Pack: {
+            if (a->pack.nelems != b->pack.nelems) return false;
+            for (std::uint32_t i = 0; i < a->pack.nelems; ++i) {
+                if (!structurally_equal(a->pack.elems[i], b->pack.elems[i])) {
+                    return false;
+                }
+            }
+            return true;
+        }
+        case Kind::PackExpansion:
+            return structurally_equal(a->pack_exp.pattern, b->pack_exp.pattern);
+        case Kind::AbiTag:
+            return sv_equal(a->abitag.tag, b->abitag.tag) &&
+                   structurally_equal(a->abitag.inner, b->abitag.inner);
     }
     return false;
 }
