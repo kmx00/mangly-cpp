@@ -39,6 +39,7 @@ enum class Kind : std::uint8_t {
     Literal,        // L <type> <value> E  (non-type template argument)
     TemplateParam,  // T_ / T<n>_  (references a template argument)
     Expression,     // X <expression> E  (dependent template argument)
+    SpecialName,    // TV/TI/TS/TT <type>, thunks (Th/Tv/Tc), guard vars
 };
 
 struct Node {
@@ -109,6 +110,11 @@ struct Node {
             const Node* const* operands;
             std::uint32_t noperands;    // operands may be types or sub-expressions
         } expr;
+        struct {
+            StringView code;   // "TV"/"TI"/"TS"/"TT" or thunk "Th"/"Tv"/"Tc"
+            StringView extra;  // thunk offset spec (verbatim); empty otherwise
+            const Node* inner; // the type (TV..) or base encoding (thunk)
+        } special;
     };
 };
 
@@ -457,6 +463,24 @@ inline void render(const Node* n, OutputBuffer& o) {
         case Kind::Expression:
             render_expr(n, o);
             return;
+        case Kind::SpecialName: {
+            StringView c = n->special.code;
+            const char* phrase = "";
+            if (c.size == 2) {
+                char a = c.data[0], b = c.data[1];
+                if (a == 'T' && b == 'V') phrase = "vtable for ";
+                else if (a == 'T' && b == 'T') phrase = "VTT for ";
+                else if (a == 'T' && b == 'I') phrase = "typeinfo for ";
+                else if (a == 'T' && b == 'S') phrase = "typeinfo name for ";
+                else if (a == 'T' && b == 'h') phrase = "non-virtual thunk to ";
+                else if (a == 'T' && b == 'v') phrase = "virtual thunk to ";
+                else if (a == 'T' && b == 'c') phrase = "covariant return thunk to ";
+                else if (a == 'G' && b == 'V') phrase = "guard variable for ";
+            }
+            o.append(phrase);
+            render(n->special.inner, o);
+            return;
+        }
     }
 }
 
@@ -640,6 +664,10 @@ inline bool structurally_equal(const Node* a, const Node* b) {
             }
             return true;
         }
+        case Kind::SpecialName:
+            return sv_equal(a->special.code, b->special.code) &&
+                   sv_equal(a->special.extra, b->special.extra) &&
+                   structurally_equal(a->special.inner, b->special.inner);
     }
     return false;
 }

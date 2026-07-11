@@ -62,7 +62,8 @@ public:
             return fail("not a _Z mangled name");
         }
         i_ = 2;
-        const Node* node = parse_encoding();
+        // <special-name> (vtable/typeinfo/thunks) or a normal <encoding>.
+        const Node* node = (peek() == 'T') ? parse_special_name() : parse_encoding();
         if (!node) return nullptr;
         if (!at_end()) return fail("trailing input");
         return node;
@@ -205,6 +206,14 @@ private:
         n->expr.noperands = noperands;
         return n;
     }
+    const Node* new_special(StringView code, StringView extra, const Node* inner) {
+        Node* n = make_node(arena_, Kind::SpecialName);
+        if (!n) return fail("out of memory");
+        n->special.code = code;
+        n->special.extra = extra;
+        n->special.inner = inner;
+        return n;
+    }
 
     // Copy a scratch pointer list into a stable arena array (nullptr if empty).
     const Node* const* dup(const Vec<const Node*>& v) {
@@ -217,6 +226,66 @@ private:
         }
         std::memcpy(arr, v.data(), sizeof(const Node*) * count);
         return arr;
+    }
+
+    // ---------------------------------------------------------- special names
+    // TV/TI/TS/TT <type>, or a thunk (Th/Tv/Tc) wrapping a base <encoding>.
+    const Node* parse_special_name() {
+        take();          // 'T'
+        char c = take();  // V/I/S/T (type) or h/v/c (thunk)
+        if (c == 'V' || c == 'I' || c == 'S' || c == 'T') {
+            StringView code{s_ + i_ - 2, 2};
+            const Node* t = parse_type();
+            if (!t) return nullptr;
+            return new_special(code, StringView{}, t);
+        }
+        if (c == 'h' || c == 'v' || c == 'c') {
+            StringView code{s_ + i_ - 2, 2};
+            std::uint32_t estart = i_;
+            if (c == 'h') {
+                if (!read_offset()) return nullptr;
+            } else if (c == 'v') {
+                if (!read_offset() || !read_offset()) return nullptr;
+            } else {  // covariant: two call-offsets
+                if (!read_call_offset() || !read_call_offset()) return nullptr;
+            }
+            StringView extra{s_ + estart, i_ - estart};
+            const Node* base = parse_encoding();
+            if (!base) return nullptr;
+            return new_special(code, extra, base);
+        }
+        return fail("unsupported special-name");
+    }
+
+    // <offset> _ : optional 'n' (negative) then digits then '_'.
+    bool read_offset() {
+        if (peek() == 'n') take();
+        if (!detail::is_digit(peek())) {
+            fail("bad thunk offset");
+            return false;
+        }
+        while (detail::is_digit(peek())) take();
+        if (peek() != '_') {
+            fail("expected '_' in thunk offset");
+            return false;
+        }
+        take();
+        return true;
+    }
+
+    // <call-offset> ::= h <offset> _ | v <offset> _ <offset> _
+    bool read_call_offset() {
+        char t = peek();
+        if (t == 'h') {
+            take();
+            return read_offset();
+        }
+        if (t == 'v') {
+            take();
+            return read_offset() && read_offset();
+        }
+        fail("bad call-offset");
+        return false;
     }
 
     // ---------------------------------------------------------------- encoding

@@ -18,7 +18,7 @@
       (not `N...E`); non-canonical `N...E` normalizes on remangle
 - [x] generated ground-truth corpus: `tools/gen_corpus.py` compiles weird-but-
       legal signatures with a real Itanium compiler and extracts `nm` symbols to
-      `tests/corpus.txt`; every symbol parses + re-mangles byte-exact (333 syms)
+      `tests/corpus.txt`; every symbol parses + re-mangles byte-exact (358 syms)
 - [x] broadened grammar (all validated byte-exact via the corpus):
   - [x] operator names (full table incl. `cv` conversion, `li` literal)
   - [x] constructor/destructor names (`C1/C2`, `D1/D2`)
@@ -33,22 +33,25 @@
   - [x] **dependent expression template args** `X<expr>E`: `sizeof`/`alignof`
         (type & expr), unary/binary/ternary operators, `tl`/`il`/`cl` lists
   - [x] function-template-id is `S_` (the template-id, not the bare name)
+  - [x] **special names**: vtable (`TV`), typeinfo (`TI`), typeinfo-name (`TS`),
+        VTT (`TT`), and thunks (`Th`/`Tv`/`Tc`) wrapping a base encoding
 - [x] `mangly` CLI (args/stdin; `-r/--remangle`), cstdlib I/O
 - [x] pure-C++ test harness (no framework dep); builds+passes on MSVC and g++
 
 ### notes / known limits
 - Grammar covered: nested names, template-ids (type / literal / expression args),
   builtins, pointer/reference/array/cv types, function types, pointer-to-member,
-  operator and ctor/dtor names, template parameters, substitutions.
-- NOT yet: `decltype` (`Dt`/`DT`), pack expansion (`Dp`/`sZ`), special names
-  (vtable `TV`, typeinfo `TI/TS`, VTT `TT`, thunks), local names (`Z..E..`) and
-  lambdas (`Ul..E`), vendor-extended types (`u`), abi-tags (`B`), and the rest of
-  the `<expression>` grammar (casts, `sr`, member access, folds).
+  operator and ctor/dtor names, template parameters, special names (vtable/
+  typeinfo/typeinfo-name/VTT/thunks), substitutions.
+- NOT yet: `decltype` (`Dt`/`DT`), pack expansion (`Dp`/`sZ`), guard variables
+  (`GV`), local names (`Z..E..`) and lambdas (`Ul..E`), vendor-extended types
+  (`u`), abi-tags (`B`), and the rest of the `<expression>` grammar (casts,
+  `sr`, member access, folds).
 - Template return type parsed but not rendered; array element spacing is
   presentation-only (`Elem[]` for a substitution element, `Elem []` otherwise).
 
 ## next (continue until IDA-level, few assumptions)
-- decltype + pack expansion; special names (vtable/typeinfo/thunks); local names
-  and lambdas; vendor types + abi-tags; broaden `<expression>` (casts, sr, dt/pt).
+- decltype + pack expansion; guard variables + local names + lambdas; vendor
+  types + abi-tags; broaden `<expression>` (casts, sr, dt/pt member access).
 - grow `tools/gen_corpus.py` per feature (it gates each construct behind a real-
   compiler byte-exact check).

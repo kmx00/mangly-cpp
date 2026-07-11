@@ -132,6 +132,26 @@ namespace ops {
   bool operator!=(const Num&, const Num&) { return false; }
   Num operator""_num(unsigned long long) { return {}; }
 }
+
+// Polymorphic hierarchy with non-virtual multiple inheritance: emits vtable
+// (TV), typeinfo (TI), typeinfo-name (TS), ctors/dtors, and non-virtual thunks
+// (Th) for the secondary base.
+namespace poly {
+  struct Ifc { virtual void run(); virtual ~Ifc(); };
+  struct Aux { virtual long calc(int) const; virtual ~Aux(); };
+  struct Impl : Ifc, Aux {
+    void run() override;
+    long calc(int) const override;
+    ~Impl() override;
+  };
+  void Ifc::run() {}
+  Ifc::~Ifc() {}
+  long Aux::calc(int) const { return 0; }
+  Aux::~Aux() {}
+  void Impl::run() {}
+  long Impl::calc(int) const { return 0; }
+  Impl::~Impl() {}
+}
 """
 
 
@@ -239,9 +259,9 @@ def extract_symbols(obj: Path, nm: str) -> list[str]:
         if len(parts) < 2:
             continue
         typ, name = parts[-2], parts[-1]
-        # text/code symbols only (T/t defined, W/w weak) -> skip vtables,
-        # typeinfo, guard variables, and undefined refs.
-        if typ in ("T", "t", "W", "w") and name.startswith("_Z"):
+        # Any DEFINED symbol (skip 'U'/'u' undefined refs) -> keeps functions,
+        # vtables (V), typeinfo (V/R), thunks (T/W), etc.
+        if typ not in ("U", "u") and name.startswith("_Z"):
             syms.add(name)
     return sorted(syms)
 

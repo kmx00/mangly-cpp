@@ -22,16 +22,34 @@ public:
     // Returns true on success; false if the AST is unmanglable or on OOM.
     bool mangle(const Node* node) {
         out_.append("_Z");
-        if (node->kind == Kind::Function) {
-            mangle_function(node);
-        } else {
-            mangle_name(node);
-        }
+        mangle_body(node);
         return !failed_ && !out_.failed();
     }
 
 private:
     void fail() { failed_ = true; }
+
+    // Mangle an <encoding> or <special-name> body (no "_Z" prefix).
+    void mangle_body(const Node* node) {
+        if (node->kind == Kind::Function) {
+            mangle_function(node);
+        } else if (node->kind == Kind::SpecialName) {
+            mangle_special(node);
+        } else {
+            mangle_name(node);
+        }
+    }
+
+    void mangle_special(const Node* n) {
+        out_.append(n->special.code);
+        char k = n->special.code.size == 2 ? n->special.code.data[1] : '\0';
+        if (k == 'h' || k == 'v' || k == 'c') {  // thunk: offset spec + base
+            out_.append(n->special.extra);
+            mangle_body(n->special.inner);
+        } else {  // TV/TI/TS/TT: a type
+            mangle_type(n->special.inner);
+        }
+    }
 
     void append_base36(std::uint32_t v) {
         static const char* digits = "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ";
