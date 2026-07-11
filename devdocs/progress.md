@@ -13,14 +13,12 @@
   - [x] demangles all `samples.txt` rows exactly
 - [x] canonical mangler (AST -> mangled), substitution matching by
       `structurally_equal` (no key strings, no hash map)
-  - [x] structural round-trip for all samples
-  - [x] byte-exact for canonical input
+  - [x] structural round-trip for all samples; byte-exact for canonical input
 - [x] canonicalization fix: unscoped single-component names/types emit bare
-      (not `N...E`), matching g++/clang; a non-canonical `N...E` normalizes on
-      remangle (found by the generated corpus; invisible to the Unity samples)
+      (not `N...E`); non-canonical `N...E` normalizes on remangle
 - [x] generated ground-truth corpus: `tools/gen_corpus.py` compiles weird-but-
       legal signatures with a real Itanium compiler and extracts `nm` symbols to
-      `tests/corpus.txt`; every symbol parses + re-mangles byte-exact (325 syms)
+      `tests/corpus.txt`; every symbol parses + re-mangles byte-exact (333 syms)
 - [x] broadened grammar (all validated byte-exact via the corpus):
   - [x] operator names (full table incl. `cv` conversion, `li` literal)
   - [x] constructor/destructor names (`C1/C2`, `D1/D2`)
@@ -30,20 +28,27 @@
   - [x] member-fn cv/ref-qualifiers on the nested-name (`NK..E`), rendered + kept
   - [x] substitution fix: a non-template nested *function* name no longer
         occupies a sub slot (only prefixes/template-prefixes/types do)
+  - [x] **template parameters** `T_`/`T<n>_` (function-template signatures),
+        substitutable, resolved to their template args for rendering
+  - [x] **dependent expression template args** `X<expr>E`: `sizeof`/`alignof`
+        (type & expr), unary/binary/ternary operators, `tl`/`il`/`cl` lists
+  - [x] function-template-id is `S_` (the template-id, not the bare name)
 - [x] `mangly` CLI (args/stdin; `-r/--remangle`), cstdlib I/O
 - [x] pure-C++ test harness (no framework dep); builds+passes on MSVC and g++
 
 ### notes / known limits
-- Grammar covered: nested names, template-ids (type + non-type literal args),
+- Grammar covered: nested names, template-ids (type / literal / expression args),
   builtins, pointer/reference/array/cv types, function types, pointer-to-member,
-  operator and ctor/dtor names, substitutions. NOT yet: general `<expression>`
-  template args (only literals), vendor/local extensions.
+  operator and ctor/dtor names, template parameters, substitutions.
+- NOT yet: `decltype` (`Dt`/`DT`), pack expansion (`Dp`/`sZ`), special names
+  (vtable `TV`, typeinfo `TI/TS`, VTT `TT`, thunks), local names (`Z..E..`) and
+  lambdas (`Ul..E`), vendor-extended types (`u`), abi-tags (`B`), and the rest of
+  the `<expression>` grammar (casts, `sr`, member access, folds).
 - Template return type parsed but not rendered; array element spacing is
   presentation-only (`Elem[]` for a substitution element, `Elem []` otherwise).
 
-## next
-- v0.0.2 - general `<expression>` template arguments (the remaining large item;
-  add operators/forms incrementally as grounded corpus rows demand them), plus
-  local names / lambdas / vendor-extended types as samples appear.
-- grow `tools/gen_corpus.py` as the grammar widens (it already gates every new
-  construct behind a real-compiler byte-exact check).
+## next (continue until IDA-level, few assumptions)
+- decltype + pack expansion; special names (vtable/typeinfo/thunks); local names
+  and lambdas; vendor types + abi-tags; broaden `<expression>` (casts, sr, dt/pt).
+- grow `tools/gen_corpus.py` per feature (it gates each construct behind a real-
+  compiler byte-exact check).
