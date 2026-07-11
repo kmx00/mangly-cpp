@@ -288,6 +288,35 @@ def emit_functions() -> list[str]:
         "void Leaf::f() {} Leaf::~Leaf() {}",
     ])
 
+    # 11) pointer / function-pointer non-type template args (L <mangled-name> E,
+    # address-of), and dependent expressions: named casts (sc/dc), scope
+    # resolution (sr), new (nw), pack-expansion-in-call (sp), nullptr literal.
+    lines.extend([
+        "void target();",
+        "int global_obj;",
+        "template <void (*)()> struct FnPtr {};",
+        "template <int*> struct ObjPtr {};",
+        "void use_fnptr(FnPtr<&target>) {}",
+        "void use_objptr(ObjPtr<&global_obj>) {}",
+        "template <void (*F)()> void call_it() { F(); }",
+        "template void call_it<&target>();",
+        "template <class T> auto scast(T t) -> decltype(static_cast<long>(t))"
+        " { return static_cast<long>(t); }",
+        "struct Cv { operator long() const; };",
+        "template long scast<Cv>(Cv);",
+        "template <class T> auto srv() -> decltype(T::value) { return T::value; }",
+        "struct HasValue { static int value; };",
+        "template int srv<HasValue>();",
+        "template <class T> auto newexpr() -> decltype(new T) { return new T; }",
+        "template int* newexpr<int>();",
+        "int callee(int, int);",
+        "template <class... Ts> auto packcall(Ts... ts)"
+        " -> decltype(callee(ts...)) { return callee(ts...); }",
+        "template int packcall<int, int>(int, int);",
+        "template <decltype(nullptr)> struct Null {};",
+        "void use_null(Null<nullptr>) {}",
+    ])
+
     return lines
 
 

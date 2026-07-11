@@ -66,6 +66,14 @@ const std::pair<const char*, const char*> kCases[] = {
     {"_ZTT4Leaf", "VTT for Leaf"},
     {"_ZTv0_n24_N3Mid1fEv", "virtual thunk to Mid::f()"},
     {"_Z7takevecDv4_i", "takevec(int __vector(4))"},
+    // pointer / function-pointer template args, named casts, scope resolution,
+    // new, pack-expansion-in-expression, nullptr literal
+    {"_Z9use_fnptr5FnPtrIXadL_Z6targetvEEE", "use_fnptr(FnPtr<&(target())>)"},
+    {"_Z8use_null4NullILDnEE", "use_null(Null<std::nullptr_t>)"},
+    {"_Z1fIiEvP3TagIXnw_T_EEE", "f<int>(Tag<new int> *)"},
+    {"_Z1gIiEvP3TagIXsrT_5valueEE", "g<int>(Tag<int::value> *)"},
+    {"_Z1hIiEvP3TagIXsciLi0EEE", "h<int>(Tag<static_cast<int>(0)> *)"},
+    {"_Z1kIJiiEEvP3TagIXspfp_EE", "k<int, int>(Tag<{parm#1}...> *)"},
 };
 }  // namespace
 

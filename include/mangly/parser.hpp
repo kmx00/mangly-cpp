@@ -249,6 +249,12 @@ private:
         n->fold.b = b;
         return n;
     }
+    const Node* new_mangled(const Node* encoding) {
+        Node* n = make_node(arena_, Kind::MangledName);
+        if (!n) return fail("out of memory");
+        n->mangled.encoding = encoding;
+        return n;
+    }
     const Node* new_decltype(const Node* expr, bool id_form) {
         Node* n = make_node(arena_, Kind::Decltype);
         if (!n) return fail("out of memory");
@@ -732,6 +738,14 @@ private:
     const Node* parse_literal() {
         expect('L');
         if (failed_) return nullptr;
+        if (peek() == '_' && peek2() == 'Z') {  // L <mangled-name> E
+            i_ += 2;                             // consume "_Z"
+            const Node* enc = parse_encoding(/*stop_at_e=*/true);
+            if (!enc) return nullptr;
+            expect('E');
+            if (failed_) return nullptr;
+            return new_mangled(enc);
+        }
         const Node* t = parse_type();
         if (!t) return nullptr;
         std::uint32_t start = i_;
@@ -984,6 +998,38 @@ private:
         if (c == 'c' && peek2() == 'l') return parse_expr_list("cl", false);
         if (c == 's' && peek2() == 'Z') return parse_expr_op("sZ", 1, false);
         if (c == 'c' && peek2() == 'v') return parse_expr_op("cv", 2, /*type0=*/true);
+        if (c == 's' && peek2() == 'c') return parse_expr_op("sc", 2, true);
+        if (c == 'd' && peek2() == 'c') return parse_expr_op("dc", 2, true);
+        if (c == 'c' && peek2() == 'c') return parse_expr_op("cc", 2, true);
+        if (c == 'r' && peek2() == 'c') return parse_expr_op("rc", 2, true);
+        if (c == 's' && peek2() == 'p') return parse_expr_op("sp", 1, false);
+        if (c == 's' && peek2() == 'r') {  // scope resolution: sr <type> <name>
+            StringView op{s_ + i_, 2};
+            i_ += 2;
+            const Node* ty = parse_type();
+            if (!ty) return nullptr;
+            const Node* nm = parse_source_name();
+            if (!nm) return nullptr;
+            const Node** arr = arena_.alloc<const Node*>(2);
+            if (!arr) return fail("out of memory");
+            arr[0] = ty;
+            arr[1] = nm;
+            return new_expr(op, arr, 2);
+        }
+        if (c == 'n' && (peek2() == 'w' || peek2() == 'a')) {  // new / new[]
+            StringView op{s_ + i_, 2};
+            i_ += 2;
+            if (peek() != '_') return fail("placement-new unsupported");
+            take();  // '_'
+            const Node* ty = parse_type();
+            if (!ty) return nullptr;
+            const Node** arr = arena_.alloc<const Node*>(1);
+            if (!arr) return fail("out of memory");
+            arr[0] = ty;
+            expect('E');  // no-initializer form; rare pi/il inits echo unchanged
+            if (failed_) return nullptr;
+            return new_expr(op, arr, 1);
+        }
         if ((c == 'd' || c == 'p') && peek2() == 't') {  // member access . / ->
             StringView op{s_ + i_, 2};
             i_ += 2;

@@ -2,6 +2,7 @@
 # compiler: g++
 # One canonical mangled name per line. Regenerate; do not hand-edit.
 _Z10use_lambdav
+_Z10use_objptr6ObjPtrIXadL_Z10global_objEEE
 _Z11make_taggedB4tag1v
 _Z2f0i
 _Z2f1Pi
@@ -107,6 +108,7 @@ _Z3fp1PFviE
 _Z3fp2PFicdEPFvvE
 _Z3fp3PFiiiES0_
 _Z3fr1RFliE
+_Z3srvI8HasValueEDtsrT_5valueEv
 _Z4f100RKe
 _Z4f101Oe
 _Z4f102PVKe
@@ -302,17 +304,23 @@ _Z4pmf2MN3ops3NumEFlicE
 _Z5bleftIJiiEEDTfLplLi0Efp_EDpT_
 _Z5derefI6HolderENT_4typeEv
 _Z5mixedIiJcdEEvT_DpPT0_
+_Z5scastI2CvEDTsclfp_ET_
 _Z5tallyi
 _Z5uleftIJiiiEEDTflplfp_EDpT_
 _Z6invokeIZ10use_lambdavEUliE_EDTclfp_Li0EEET_
 _Z6memaccI8HasFieldEDtdtfp_5fieldET_
 _Z6urightIJiiEEDTfrplfp_EDpT_
+_Z7call_itIXadL_Z6targetvEEEvv
 _Z7castargIdEvP3TagIXcvistT_EE
 _Z7counterv
+_Z7newexprIiEDTnw_T_EEv
 _Z7takevecDv4_i
+_Z8packcallIJiiEEDTcl6calleespfp_EEDpT_
+_Z8use_null4NullILDnEE
 _Z8variadicIJicdEEvDpT_
 _Z9countpackIJicEEvP3TagIXsZT_EE
 _Z9tagged_fnB2v2i
+_Z9use_fnptr5FnPtrIXadL_Z6targetvEEE
 _ZGVZ5tallyiE1a
 _ZGVZ5tallyiE1b
 _ZGVZ7countervE1n

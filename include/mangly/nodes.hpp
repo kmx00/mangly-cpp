@@ -50,6 +50,7 @@ enum class Kind : std::uint8_t {
     VectorType,     // Dv <num> _ <type>  (vendor vector)
     Vendor,         // u <source-name>  (vendor-extended type)
     Fold,           // fl/fr/fL/fR  (fold expression)
+    MangledName,    // L <mangled-name> E  (external-name / pointer literal)
 };
 
 struct Node {
@@ -168,6 +169,9 @@ struct Node {
             const Node* a;    // pack (unary) or first operand (binary)
             const Node* b;    // second operand (binary), else null
         } fold;
+        struct {
+            const Node* encoding;  // the _Z <encoding> named by the literal
+        } mangled;
     };
 };
 
@@ -499,6 +503,8 @@ inline void render(const Node* n, OutputBuffer& o) {
             } else if (n->literal.value.size && n->literal.value.data[0] == 'n') {
                 o.push('-');  // negative literal: leading 'n'
                 o.append(n->literal.value.data + 1, n->literal.value.size - 1);
+            } else if (!n->literal.value.size && t) {
+                render(t, o);  // valueless literal (e.g. LDnE): show the type
             } else {
                 o.append(n->literal.value);
             }
@@ -642,6 +648,9 @@ inline void render(const Node* n, OutputBuffer& o) {
             o.push(')');
             return;
         }
+        case Kind::MangledName:
+            render(n->mangled.encoding, o);  // the named function/object
+            return;
     }
 }
 
@@ -713,6 +722,41 @@ inline void render_expr(const Node* n, OutputBuffer& o) {
             if (i > 1) o.push(',');
             render(a[i], o);
         }
+        o.push(')');
+        return;
+    }
+    if (is("sr") && k >= 2) {  // scope resolution: type::name
+        render(a[0], o);
+        o.append("::");
+        render(a[1], o);
+        return;
+    }
+    if (is("sp") && k >= 1) {  // pack expansion in an expression: expr...
+        render(a[0], o);
+        o.append("...");
+        return;
+    }
+    if ((is("nw") || is("na")) && k >= 1) {  // new T / new[] T (+ initializer)
+        o.append(is("na") ? "new[] " : "new ");
+        render(a[0], o);
+        if (k > 1) {
+            o.push('(');
+            for (std::uint32_t i = 1; i < k; ++i) {
+                if (i > 1) o.push(',');
+                render(a[i], o);
+            }
+            o.push(')');
+        }
+        return;
+    }
+    if ((is("sc") || is("dc") || is("cc") || is("rc")) && k >= 2) {  // named casts
+        o.append(is("sc") ? "static_cast<"
+                 : is("dc") ? "dynamic_cast<"
+                 : is("cc") ? "const_cast<"
+                            : "reinterpret_cast<");
+        render(a[0], o);
+        o.append(">(");
+        render(a[1], o);
         o.push(')');
         return;
     }
@@ -894,6 +938,8 @@ inline bool structurally_equal(const Node* a, const Node* b) {
                    sv_equal(a->fold.op, b->fold.op) &&
                    structurally_equal(a->fold.a, b->fold.a) &&
                    structurally_equal(a->fold.b, b->fold.b);
+        case Kind::MangledName:
+            return structurally_equal(a->mangled.encoding, b->mangled.encoding);
     }
     return false;
 }
