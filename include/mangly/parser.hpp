@@ -256,6 +256,26 @@ private:
         n->fparam.num = num;
         return n;
     }
+    const Node* new_pack(const Node* const* elems, std::uint32_t nelems) {
+        Node* n = make_node(arena_, Kind::Pack);
+        if (!n) return fail("out of memory");
+        n->pack.elems = elems;
+        n->pack.nelems = nelems;
+        return n;
+    }
+    const Node* new_pack_expansion(const Node* pattern) {
+        Node* n = make_node(arena_, Kind::PackExpansion);
+        if (!n) return fail("out of memory");
+        n->pack_exp.pattern = pattern;
+        return n;
+    }
+    const Node* new_abitag(const Node* inner, StringView tag) {
+        Node* n = make_node(arena_, Kind::AbiTag);
+        if (!n) return fail("out of memory");
+        n->abitag.inner = inner;
+        n->abitag.tag = tag;
+        return n;
+    }
 
     // Copy a scratch pointer list into a stable arena array (nullptr if empty).
     const Node* const* dup(const Vec<const Node*>& v) {
@@ -601,7 +621,21 @@ private:
         }
         StringView t{s_ + i_, static_cast<std::uint32_t>(len)};
         i_ += static_cast<std::uint32_t>(len);
-        return new_source(t);
+        const Node* node = new_source(t);
+        // trailing abi-tags: B <source-name>
+        while (node && peek() == 'B') {
+            take();
+            if (!detail::is_digit(peek())) return fail("expected abi-tag length");
+            std::size_t tl = 0;
+            while (detail::is_digit(peek())) {
+                tl = tl * 10 + static_cast<std::size_t>(take() - '0');
+            }
+            if (static_cast<std::size_t>(i_) + tl > n_) return fail("abi-tag overruns");
+            StringView tag{s_ + i_, static_cast<std::uint32_t>(tl)};
+            i_ += static_cast<std::uint32_t>(tl);
+            node = new_abitag(node, tag);
+        }
+        return node;
     }
 
     // -------------------------------------------------------------- templates
@@ -636,6 +670,19 @@ private:
             expect('E');
             return failed_ ? nullptr : e;
         }
+        if (peek() == 'J') {  // argument pack: J <template-arg>* E
+            take();
+            Vec<const Node*> elems;
+            while (peek() != 'E') {
+                if (at_end()) return fail("unterminated argument pack");
+                const Node* e = parse_template_arg();
+                if (!e) return nullptr;
+                elems.push(e);
+            }
+            expect('E');
+            if (failed_ || elems.failed()) return nullptr;
+            return new_pack(dup(elems), elems.size());
+        }
         return parse_type();
     }
 
@@ -668,6 +715,12 @@ private:
         }
         if (c == 'D' && (peek2() == 't' || peek2() == 'T')) {
             return parse_decltype();
+        }
+        if (c == 'D' && peek2() == 'p') {  // pack expansion
+            i_ += 2;
+            const Node* pattern = parse_type();
+            if (!pattern) return nullptr;
+            return add_sub(new_pack_expansion(pattern));
         }
         if (c == 'D' && i_ + 1 < n_ && is_builtin_d_code(s_[i_ + 1])) {
             StringView code{s_ + i_, 2};
@@ -848,6 +901,21 @@ private:
         if (c == 't' && peek2() == 'l') return parse_expr_list("tl", /*type0=*/true);
         if (c == 'i' && peek2() == 'l') return parse_expr_list("il", false);
         if (c == 'c' && peek2() == 'l') return parse_expr_list("cl", false);
+        if (c == 's' && peek2() == 'Z') return parse_expr_op("sZ", 1, false);
+        if (c == 'c' && peek2() == 'v') return parse_expr_op("cv", 2, /*type0=*/true);
+        if ((c == 'd' || c == 'p') && peek2() == 't') {  // member access . / ->
+            StringView op{s_ + i_, 2};
+            i_ += 2;
+            const Node* obj = parse_expression();
+            if (!obj) return nullptr;
+            const Node* mem = parse_source_name();  // unresolved-name (common case)
+            if (!mem) return nullptr;
+            const Node** arr = arena_.alloc<const Node*>(2);
+            if (!arr) return fail("out of memory");
+            arr[0] = obj;
+            arr[1] = mem;
+            return new_expr(op, arr, 2);
+        }
         // operators (arithmetic/logical/comparison/...): fixed arity.
         int arity = expr_operator_arity(c, peek2());
         if (arity > 0) {

@@ -117,9 +117,10 @@ unchanged.
   operator names, constructor/destructor names, template parameters (`T_`),
   special names (vtable/typeinfo/typeinfo-name/VTT/thunks), `decltype`, local
   names, guard variables, lambda/unnamed closure types, function-parameter
-  expressions, and substitutions. Not yet handled: pack expansion, vendor/
-  abi-tag extensions, and the remaining `<expression>` forms (casts, scope
-  resolution, member access, folds).
+  expressions, variadic packs (expansion/argument-packs/`sizeof...`), abi-tags,
+  member-access and cast expressions, and substitutions. Not yet handled:
+  vendor-extended types, fold expressions, and a few rarer `<expression>` forms
+  (scope resolution, new/delete, typeid).
 - The template return type is parsed but intentionally not rendered (matches the
   source tool: template functions drop the leading return type).
 - Array element spacing is presentation-only and follows the source tool:

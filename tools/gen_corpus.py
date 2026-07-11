@@ -243,6 +243,26 @@ def emit_functions() -> list[str]:
         " return invoke(g); }",
     ])
 
+    # 9) variadic templates (Dp pack expansion, J argument packs, sizeof...),
+    #    abi-tags, and dependent expressions (member access, cast).
+    lines.extend([
+        "template <class... Ts> void variadic(Ts...) {}",
+        "template void variadic<int, char, double>(int, char, double);",
+        "template <class T, class... Ts> void mixed(T, Ts*...) {}",
+        "template void mixed<int, char, double>(int, char*, double*);",
+        "template <class... Ts> void countpack(Tag<sizeof...(Ts)>*) {}",
+        "template void countpack<int, char>(Tag<2>*);",
+        'struct __attribute__((abi_tag("tag1"))) Tagged { int v; };',
+        "Tagged make_tagged() { return {}; }",
+        'int __attribute__((abi_tag("v2"))) tagged_fn(int x) { return x; }',
+        "struct HasField { int field; };",
+        "template <class T> auto memacc(T t) -> decltype(t.field)"
+        " { return t.field; }",
+        "template int memacc<HasField>(HasField);",
+        "template <class T> void castarg(Tag<(int)sizeof(T)>*) {}",
+        "template void castarg<double>(Tag<8>*);",
+    ])
+
     return lines
 
 

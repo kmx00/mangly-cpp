@@ -2,6 +2,7 @@
 # compiler: g++
 # One canonical mangled name per line. Regenerate; do not hand-edit.
 _Z10use_lambdav
+_Z11make_taggedB4tag1v
 _Z2f0i
 _Z2f1Pi
 _Z2f2PPi
@@ -298,9 +299,15 @@ _Z4pmd1MN3ops3NumEi
 _Z4pmd2MN3ops3NumElS1_
 _Z4pmf1MN3ops3NumEFvvE
 _Z4pmf2MN3ops3NumEFlicE
+_Z5mixedIiJcdEEvT_DpPT0_
 _Z5tallyi
 _Z6invokeIZ10use_lambdavEUliE_EDTclfp_Li0EEET_
+_Z6memaccI8HasFieldEDtdtfp_5fieldET_
+_Z7castargIdEvP3TagIXcvistT_EE
 _Z7counterv
+_Z8variadicIJicdEEvDpT_
+_Z9countpackIJicEEvP3TagIXsZT_EE
+_Z9tagged_fnB2v2i
 _ZGVZ5tallyiE1a
 _ZGVZ5tallyiE1b
 _ZGVZ7countervE1n

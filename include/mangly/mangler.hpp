@@ -231,6 +231,12 @@ private:
             case Kind::Closure:
                 mangle_closure(part);
                 return;
+            case Kind::AbiTag:
+                mangle_prefix_part(part->abitag.inner);
+                out_.push('B');
+                out_.append_uint(part->abitag.tag.size);
+                out_.append(part->abitag.tag);
+                return;
             default:
                 fail();
                 return;
@@ -370,6 +376,18 @@ private:
                 out_.append(node->fparam.num);
                 out_.push('_');
                 return;  // function params are not substitutable
+            case Kind::Pack:  // argument pack (not substitutable)
+                out_.push('J');
+                for (std::uint32_t i = 0; i < node->pack.nelems; ++i) {
+                    mangle_type(node->pack.elems[i]);
+                }
+                out_.push('E');
+                return;
+            case Kind::PackExpansion:
+                out_.append("Dp");
+                mangle_type(node->pack_exp.pattern);
+                add_sub(node);
+                return;
             default:
                 fail();
                 return;
@@ -380,11 +398,18 @@ private:
     // arity; tl/il/cl are E-terminated.
     void mangle_expression(const Node* e) {
         if (failed_) return;
-        out_.append(e->expr.op);
+        StringView op = e->expr.op;
+        out_.append(op);
+        // dt/pt: <expr> <source-name>  (the member is a name, not a type)
+        if (op.size == 2 && op.data[1] == 't' &&
+            (op.data[0] == 'd' || op.data[0] == 'p') && e->expr.noperands == 2) {
+            mangle_operand(e->expr.operands[0]);
+            mangle_prefix_part(e->expr.operands[1]);
+            return;
+        }
         for (std::uint32_t i = 0; i < e->expr.noperands; ++i) {
             mangle_operand(e->expr.operands[i]);
         }
-        StringView op = e->expr.op;
         bool e_terminated =
             op.size == 2 && ((op.data[0] == 't' && op.data[1] == 'l') ||
                              (op.data[0] == 'i' && op.data[1] == 'l') ||
