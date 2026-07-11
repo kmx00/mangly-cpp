@@ -46,6 +46,8 @@ private:
         if (k == 'h' || k == 'v' || k == 'c') {  // thunk: offset spec + base
             out_.append(n->special.extra);
             mangle_body(n->special.inner);
+        } else if (n->special.code.size == 2 && n->special.code.data[0] == 'G') {
+            mangle_name(n->special.inner);  // guard variable wraps a <name>
         } else {  // TV/TI/TS/TT: a type
             mangle_type(n->special.inner);
         }
@@ -108,6 +110,10 @@ private:
     // (2+ prefix components) is wrapped in N...E.
     void mangle_name(const Node* node, StringView this_quals = StringView{},
                      char ref_qual = 0) {
+        if (node->kind == Kind::LocalName) {
+            mangle_local_name(node, this_quals, ref_qual);
+            return;
+        }
         if (node->kind == Kind::QualifiedName && node->qual.nparts == 1) {
             mangle_prefix_part(node->qual.parts[0]);  // bare, not a substitution
             return;
@@ -138,6 +144,30 @@ private:
         } else {
             fail();
         }
+    }
+
+    void mangle_local_name(const Node* n, StringView tq, char rf) {
+        out_.push('Z');
+        mangle_body(n->local.scope);
+        out_.push('E');
+        mangle_name(n->local.entity, tq, rf);  // entity's cv belongs to this fn
+        out_.append(n->local.disc);
+    }
+
+    void mangle_closure(const Node* n) {
+        if (n->closure.unnamed) {
+            out_.append("Ut");
+            out_.append(n->closure.num);
+            out_.push('_');
+            return;
+        }
+        out_.append("Ul");
+        for (std::uint32_t i = 0; i < n->closure.nparams; ++i) {
+            mangle_type(n->closure.params[i]);
+        }
+        out_.push('E');
+        out_.append(n->closure.num);
+        out_.push('_');
     }
 
     void mangle_prefix(const Node* const* parts, std::uint32_t n) {
@@ -197,6 +227,9 @@ private:
                 return;
             case Kind::CtorDtor:
                 out_.append(part->ctordtor.code);
+                return;
+            case Kind::Closure:
+                mangle_closure(part);
                 return;
             default:
                 fail();
@@ -324,6 +357,19 @@ private:
                 out_.push('E');
                 add_sub(node);
                 return;
+            case Kind::LocalName:
+                mangle_local_name(node, StringView{}, 0);
+                add_sub(node);  // a local-name used as a type is substitutable
+                return;
+            case Kind::Closure:
+                mangle_closure(node);
+                add_sub(node);
+                return;
+            case Kind::FuncParam:
+                out_.append("fp");
+                out_.append(node->fparam.num);
+                out_.push('_');
+                return;  // function params are not substitutable
             default:
                 fail();
                 return;

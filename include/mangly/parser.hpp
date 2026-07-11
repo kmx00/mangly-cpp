@@ -62,8 +62,18 @@ public:
             return fail("not a _Z mangled name");
         }
         i_ = 2;
-        // <special-name> (vtable/typeinfo/thunks) or a normal <encoding>.
-        const Node* node = (peek() == 'T') ? parse_special_name() : parse_encoding();
+        // <special-name> (vtable/typeinfo/thunks/guard) or a normal <encoding>.
+        const Node* node;
+        if (peek() == 'T') {
+            node = parse_special_name();
+        } else if (peek() == 'G' && peek2() == 'V') {
+            take();  // 'G'
+            take();  // 'V'
+            const Node* inner = parse_name();  // often a local-name
+            node = inner ? new_special(make_sv("GV"), StringView{}, inner) : nullptr;
+        } else {
+            node = parse_encoding();
+        }
         if (!node) return nullptr;
         if (!at_end()) return fail("trailing input");
         return node;
@@ -221,6 +231,31 @@ private:
         n->decl_type.id_form = id_form;
         return n;
     }
+    const Node* new_local_name(const Node* scope, const Node* entity,
+                               StringView disc) {
+        Node* n = make_node(arena_, Kind::LocalName);
+        if (!n) return fail("out of memory");
+        n->local.scope = scope;
+        n->local.entity = entity;
+        n->local.disc = disc;
+        return n;
+    }
+    const Node* new_closure(const Node* const* params, std::uint32_t nparams,
+                            StringView num, bool unnamed) {
+        Node* n = make_node(arena_, Kind::Closure);
+        if (!n) return fail("out of memory");
+        n->closure.params = params;
+        n->closure.nparams = nparams;
+        n->closure.num = num;
+        n->closure.unnamed = unnamed;
+        return n;
+    }
+    const Node* new_funcparam(StringView num) {
+        Node* n = make_node(arena_, Kind::FuncParam);
+        if (!n) return fail("out of memory");
+        n->fparam.num = num;
+        return n;
+    }
 
     // Copy a scratch pointer list into a stable arena array (nullptr if empty).
     const Node* const* dup(const Vec<const Node*>& v) {
@@ -295,8 +330,86 @@ private:
         return false;
     }
 
+    // <local-name> ::= Z <encoding> E <entity> [<discriminator>]
+    //               |  Z <encoding> E s [<discriminator>]   (string literal)
+    const Node* parse_local_name() {
+        take();  // 'Z'
+        const Node* const* saved_targs = cur_targs_;
+        std::uint32_t saved_ntargs = cur_ntargs_;
+        const Node* scope = parse_encoding(/*stop_at_e=*/true);
+        cur_targs_ = saved_targs;  // the scope must not leak template context
+        cur_ntargs_ = saved_ntargs;
+        if (!scope) return nullptr;
+        expect('E');
+        if (failed_) return nullptr;
+        pending_cv_ = StringView{};  // the entity's own cv belongs to the outer fn
+        pending_ref_ = 0;
+        const Node* entity;
+        if (peek() == 's') {  // string literal
+            take();
+            entity = new_source(make_sv("string literal"));
+        } else {
+            entity = parse_name();
+        }
+        if (!entity) return nullptr;
+        StringView disc{};
+        if (peek() == '_') {
+            std::uint32_t start = i_;
+            take();
+            if (peek() == '_') {  // __<number>_
+                take();
+                while (peek() != '_') {
+                    if (at_end()) return fail("bad discriminator");
+                    take();
+                }
+                take();
+            } else {
+                while (detail::is_digit(peek())) take();
+            }
+            disc = StringView{s_ + start, i_ - start};
+        }
+        return new_local_name(scope, entity, disc);
+    }
+
+    // <closure-type> ::= Ul <param-types> E [<number>] _  (lambda)
+    // <unnamed-type> ::= Ut [<number>] _
+    const Node* parse_closure() {
+        take();  // 'U'
+        char t = take();
+        if (t == 'l') {
+            Vec<const Node*> params;
+            while (peek() != 'E') {
+                if (at_end()) return fail("unterminated lambda");
+                const Node* p = parse_type();
+                if (!p) return nullptr;
+                params.push(p);
+            }
+            expect('E');
+            if (failed_ || params.failed()) return nullptr;
+            std::uint32_t ns = i_;
+            while (peek() != '_') {
+                if (at_end()) return fail("unterminated closure");
+                take();
+            }
+            StringView num{s_ + ns, i_ - ns};
+            take();  // '_'
+            return new_closure(dup(params), params.size(), num, /*unnamed=*/false);
+        }
+        if (t == 't') {
+            std::uint32_t ns = i_;
+            while (peek() != '_') {
+                if (at_end()) return fail("unterminated unnamed type");
+                take();
+            }
+            StringView num{s_ + ns, i_ - ns};
+            take();  // '_'
+            return new_closure(nullptr, 0, num, /*unnamed=*/true);
+        }
+        return fail("unsupported U-name");
+    }
+
     // ---------------------------------------------------------------- encoding
-    const Node* parse_encoding() {
+    const Node* parse_encoding(bool stop_at_e = false) {
         pending_cv_ = StringView{};
         pending_ref_ = 0;
         const Node* name = parse_name();
@@ -305,7 +418,9 @@ private:
         // captured now, before parsing param types clobbers the pending slots.
         StringView this_quals = pending_cv_;
         char ref_qual = pending_ref_;
-        if (at_end()) return name;  // data name (no bare-function-type)
+        // A data name has no bare-function-type: input ends, or (in a local-name
+        // scope) the terminating 'E' follows.
+        if (at_end() || (stop_at_e && peek() == 'E')) return name;
 
         // A function template's signature (return type + params) references its
         // template arguments via T_/T<n>_; expose them so those resolve.
@@ -321,7 +436,7 @@ private:
         }
 
         Vec<const Node*> params;
-        while (!at_end()) {
+        while (!at_end() && !(stop_at_e && peek() == 'E')) {
             const Node* p = parse_type();
             if (!p) return nullptr;
             params.push(p);
@@ -356,6 +471,7 @@ private:
     const Node* parse_name() {
         char c = peek();
         if (c == 'N') return parse_nested_name(/*as_type=*/false);
+        if (c == 'Z') return parse_local_name();
         if (c == 'S') {
             const Node* base = parse_substitution();
             if (!base) return nullptr;
@@ -451,6 +567,7 @@ private:
             i_ += 2;
             return new_ctordtor(code);
         }
+        if (c == 'U') return parse_closure();  // lambda / unnamed type
         // operator names (incl. "cv <type>" and "li <source-name>").
         if (is_operator_code(c, peek2())) return parse_operator_name();
         return fail("unsupported unqualified-name");
@@ -542,6 +659,7 @@ private:
     const Node* parse_type() {
         char c = peek();
         if (c == 'N') return parse_nested_name(/*as_type=*/true);
+        if (c == 'Z') return add_sub(parse_local_name());  // local-name as a type
         if (c == 'S') {
             const Node* base = parse_substitution();
             if (!base) return nullptr;
@@ -712,6 +830,17 @@ private:
         char c = peek();
         if (c == 'L') return parse_literal();
         if (c == 'T') return parse_template_param();
+        if (c == 'f' && peek2() == 'p') {  // function parameter: fp_ / fp<n>_
+            i_ += 2;
+            std::uint32_t ns = i_;
+            while (peek() != '_') {
+                if (at_end()) return fail("unterminated function param");
+                take();
+            }
+            StringView num{s_ + ns, i_ - ns};
+            take();  // '_'
+            return new_funcparam(num);
+        }
         if (c == 's' && peek2() == 't') return parse_expr_op("st", 1, /*type0=*/true);
         if (c == 's' && peek2() == 'z') return parse_expr_op("sz", 1, false);
         if (c == 'a' && peek2() == 't') return parse_expr_op("at", 1, true);

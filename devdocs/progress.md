@@ -18,7 +18,7 @@
       (not `N...E`); non-canonical `N...E` normalizes on remangle
 - [x] generated ground-truth corpus: `tools/gen_corpus.py` compiles weird-but-
       legal signatures with a real Itanium compiler and extracts `nm` symbols to
-      `tests/corpus.txt`; every symbol parses + re-mangles byte-exact (359 syms)
+      `tests/corpus.txt`; every symbol parses + re-mangles byte-exact (370 syms)
 - [x] broadened grammar (all validated byte-exact via the corpus):
   - [x] operator names (full table incl. `cv` conversion, `li` literal)
   - [x] constructor/destructor names (`C1/C2`, `D1/D2`)
@@ -36,6 +36,9 @@
   - [x] **special names**: vtable (`TV`), typeinfo (`TI`), typeinfo-name (`TS`),
         VTT (`TT`), and thunks (`Th`/`Tv`/`Tc`) wrapping a base encoding
   - [x] **decltype** (`Dt`/`DT`) types (substitutable)
+  - [x] **local names** (`Z <encoding> E <entity>` + discriminators), **guard
+        variables** (`GV`), **lambda/unnamed closure types** (`Ul..E.._`/`Ut.._`),
+        and **function-parameter expressions** (`fp_`)
 - [x] `mangly` CLI (args/stdin; `-r/--remangle`), cstdlib I/O
 - [x] pure-C++ test harness (no framework dep); builds+passes on MSVC and g++
 
@@ -43,11 +46,11 @@
 - Grammar covered: nested names, template-ids (type / literal / expression args),
   builtins, pointer/reference/array/cv types, function types, pointer-to-member,
   operator and ctor/dtor names, template parameters, special names (vtable/
-  typeinfo/typeinfo-name/VTT/thunks), decltype, substitutions.
-- NOT yet: pack expansion (`Dp`/`sZ`), guard variables (`GV`), local names
-  (`Z..E..`) and lambdas (`Ul..E`), vendor-extended types (`u`), abi-tags (`B`),
-  and the rest of the `<expression>` grammar (casts, `sr`, member access `dt`/
-  `pt`, function params `fp`, folds).
+  typeinfo/typeinfo-name/VTT/thunks), decltype, local names, guard variables,
+  lambda/unnamed closures, function-parameter expressions, substitutions.
+- NOT yet: pack expansion (`Dp`/`sZ`), vendor-extended types (`u`), abi-tags
+  (`B`), and the rest of the `<expression>` grammar (casts, `sr`, member access
+  `dt`/`pt`, folds).
 - Template return type parsed but not rendered; array element spacing is
   presentation-only (`Elem[]` for a substitution element, `Elem []` otherwise).
 

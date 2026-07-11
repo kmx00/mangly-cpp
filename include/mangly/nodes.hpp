@@ -41,6 +41,9 @@ enum class Kind : std::uint8_t {
     Expression,     // X <expression> E  (dependent template argument)
     SpecialName,    // TV/TI/TS/TT <type>, thunks (Th/Tv/Tc), guard vars
     Decltype,       // Dt <expr> E (id) / DT <expr> E (expression)
+    LocalName,      // Z <encoding> E <entity> [<discriminator>]
+    Closure,        // Ul <types> E <num>_ (lambda) / Ut <num>_ (unnamed type)
+    FuncParam,      // fp_ / fp<n>_  (function parameter, in expressions)
 };
 
 struct Node {
@@ -120,6 +123,20 @@ struct Node {
             const Node* expr;
             bool id_form;  // true == Dt (id-expression), false == DT (expression)
         } decl_type;
+        struct {
+            const Node* scope;   // enclosing <encoding>
+            const Node* entity;  // the local <name>
+            StringView disc;     // discriminator (verbatim); empty if none
+        } local;
+        struct {
+            const Node* const* params;  // lambda parameter types (null for Ut)
+            std::uint32_t nparams;
+            StringView num;  // instance number text (empty == first)
+            bool unnamed;    // true == Ut (unnamed type), false == Ul (lambda)
+        } closure;
+        struct {
+            StringView num;  // fp<num>_ (empty == parameter 0)
+        } fparam;
     };
 };
 
@@ -491,6 +508,52 @@ inline void render(const Node* n, OutputBuffer& o) {
             render(n->decl_type.expr, o);
             o.push(')');
             return;
+        case Kind::LocalName:
+            render(n->local.scope, o);
+            o.append("::");
+            render(n->local.entity, o);
+            return;
+        case Kind::Closure: {
+            // display index: first (empty) == #1, "0" == #2, "1" == #3, ...
+            std::uint64_t idx = 1;
+            if (n->closure.num.size) {
+                std::uint64_t raw = 0;
+                for (std::uint32_t i = 0; i < n->closure.num.size; ++i)
+                    raw = raw * 10 +
+                          static_cast<std::uint64_t>(n->closure.num.data[i] - '0');
+                idx = raw + 2;
+            }
+            if (n->closure.unnamed) {
+                o.append("{unnamed type#");
+            } else {
+                o.append("{lambda(");
+                for (std::uint32_t i = 0; i < n->closure.nparams; ++i) {
+                    if (i) o.push(',');
+                    render(n->closure.params[i], o);
+                }
+                o.append(")#");
+            }
+            o.append_uint(idx);
+            o.push('}');
+            return;
+        }
+        case Kind::FuncParam: {
+            std::uint64_t idx = 1;
+            if (n->fparam.num.size) {
+                std::uint64_t raw = 0;
+                bool digits = true;
+                for (std::uint32_t i = 0; i < n->fparam.num.size; ++i) {
+                    char ch = n->fparam.num.data[i];
+                    if (ch < '0' || ch > '9') { digits = false; break; }
+                    raw = raw * 10 + static_cast<std::uint64_t>(ch - '0');
+                }
+                if (digits) idx = raw + 2;
+            }
+            o.append("{parm#");
+            o.append_uint(idx);
+            o.push('}');
+            return;
+        }
     }
 }
 
@@ -681,6 +744,23 @@ inline bool structurally_equal(const Node* a, const Node* b) {
         case Kind::Decltype:
             return a->decl_type.id_form == b->decl_type.id_form &&
                    structurally_equal(a->decl_type.expr, b->decl_type.expr);
+        case Kind::LocalName:
+            return sv_equal(a->local.disc, b->local.disc) &&
+                   structurally_equal(a->local.scope, b->local.scope) &&
+                   structurally_equal(a->local.entity, b->local.entity);
+        case Kind::Closure: {
+            if (a->closure.unnamed != b->closure.unnamed) return false;
+            if (a->closure.nparams != b->closure.nparams) return false;
+            if (!sv_equal(a->closure.num, b->closure.num)) return false;
+            for (std::uint32_t i = 0; i < a->closure.nparams; ++i) {
+                if (!structurally_equal(a->closure.params[i], b->closure.params[i])) {
+                    return false;
+                }
+            }
+            return true;
+        }
+        case Kind::FuncParam:
+            return sv_equal(a->fparam.num, b->fparam.num);
     }
     return false;
 }

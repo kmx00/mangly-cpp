@@ -44,6 +44,13 @@ const std::pair<const char*, const char*> kCases[] = {
     // decltype
     {"_Z4ft_jIiEvT_DTpltlS0_EtlS0_EE",
      "ft_j<int>(int,decltype ((int{})+(int{})))"},
+    // local names, guard variables, lambdas, function params
+    {"_ZZ7countervE1n", "counter()::n"},
+    {"_ZGVZ7countervE1n", "guard variable for counter()::n"},
+    {"_ZZ10use_lambdavENKUliE_clEi",
+     "use_lambda()::{lambda(int)#1}::operator()(int) const"},
+    {"_Z6invokeIZ10use_lambdavEUliE_EDTclfp_Li0EEET_",
+     "invoke<use_lambda()::{lambda(int)#1}>(use_lambda()::{lambda(int)#1})"},
 };
 }  // namespace
 

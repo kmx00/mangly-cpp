@@ -232,6 +232,17 @@ def emit_functions() -> list[str]:
         "template void ft_j<int>(int, int);",
     ])
 
+    # 8) local names, guard variables, and lambdas (closure types + fp_).
+    lines.extend([
+        "int side_effect();",
+        "int& counter() { static int n = side_effect(); return n; }",
+        "long& tally(int) { static long a = side_effect();"
+        " static long b = side_effect(); return b ? a : a; }",
+        "template <class F> auto invoke(F f) -> decltype(f(0)) { return f(0); }",
+        "int use_lambda() { auto g = [](int x) { return x + 1; };"
+        " return invoke(g); }",
+    ])
+
     return lines
 
 
