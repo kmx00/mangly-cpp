@@ -214,6 +214,13 @@ private:
         n->special.inner = inner;
         return n;
     }
+    const Node* new_decltype(const Node* expr, bool id_form) {
+        Node* n = make_node(arena_, Kind::Decltype);
+        if (!n) return fail("out of memory");
+        n->decl_type.expr = expr;
+        n->decl_type.id_form = id_form;
+        return n;
+    }
 
     // Copy a scratch pointer list into a stable arena array (nullptr if empty).
     const Node* const* dup(const Vec<const Node*>& v) {
@@ -541,6 +548,9 @@ private:
             if (peek() == 'I') return template_wrap(base);
             return base;
         }
+        if (c == 'D' && (peek2() == 't' || peek2() == 'T')) {
+            return parse_decltype();
+        }
         if (c == 'D' && i_ + 1 < n_ && is_builtin_d_code(s_[i_ + 1])) {
             StringView code{s_ + i_, 2};
             i_ += 2;
@@ -631,6 +641,18 @@ private:
         n->array.has_dim = has_dim;
         n->array.elem_is_sub = elem_is_sub;
         return add_sub(n);
+    }
+
+    // <decltype> ::= Dt <expression> E   (id-expression)
+    //             |  DT <expression> E   (expression)
+    const Node* parse_decltype() {
+        take();  // 'D'
+        bool id_form = take() == 't';  // 't' -> Dt, 'T' -> DT
+        const Node* e = parse_expression();
+        if (!e) return nullptr;
+        expect('E');
+        if (failed_) return nullptr;
+        return add_sub(new_decltype(e, id_form));  // decltype is a type: substitutable
     }
 
     const Node* parse_function_type() {

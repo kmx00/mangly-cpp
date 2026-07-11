@@ -41,6 +41,9 @@ const std::pair<const char*, const char*> kCases[] = {
     {"_ZThn8_N4poly4ImplD1Ev", "non-virtual thunk to poly::Impl::~Impl()"},
     {"_ZThn8_NK4poly4Impl4calcEi",
      "non-virtual thunk to poly::Impl::calc(int) const"},
+    // decltype
+    {"_Z4ft_jIiEvT_DTpltlS0_EtlS0_EE",
+     "ft_j<int>(int,decltype ((int{})+(int{})))"},
 };
 }  // namespace
 

@@ -228,6 +228,8 @@ def emit_functions() -> list[str]:
         "template void ft_g<int>(Tag<sizeof(int)>*);",
         "template <class T> void ft_h(Tag<sizeof(T) + 1>*) {}",
         "template void ft_h<double>(Tag<sizeof(double) + 1>*);",
+        "template <class T> void ft_j(T, decltype(T{} + T{})) {}",
+        "template void ft_j<int>(int, int);",
     ])
 
     return lines

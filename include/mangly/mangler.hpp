@@ -318,6 +318,12 @@ private:
                 out_.push('_');
                 add_sub(node);  // template-params are substitutable
                 return;
+            case Kind::Decltype:
+                out_.append(node->decl_type.id_form ? "Dt" : "DT");
+                mangle_operand(node->decl_type.expr);
+                out_.push('E');
+                add_sub(node);
+                return;
             default:
                 fail();
                 return;
