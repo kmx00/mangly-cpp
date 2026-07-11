@@ -34,6 +34,13 @@ const std::pair<const char*, const char*> kCases[] = {
     {"_Z4ft_gIiEvP3TagIXstT_EE", "ft_g<int>(Tag<sizeof (int)> *)"},
     {"_Z4ft_hIdEvP3TagIXplstT_Li1EEE",
      "ft_h<double>(Tag<(sizeof (double))+(1)> *)"},
+    // special names: vtable / typeinfo / typeinfo-name / thunks
+    {"_ZTVN4poly3IfcE", "vtable for poly::Ifc"},
+    {"_ZTIN4poly4ImplE", "typeinfo for poly::Impl"},
+    {"_ZTSN4poly3AuxE", "typeinfo name for poly::Aux"},
+    {"_ZThn8_N4poly4ImplD1Ev", "non-virtual thunk to poly::Impl::~Impl()"},
+    {"_ZThn8_NK4poly4Impl4calcEi",
+     "non-virtual thunk to poly::Impl::calc(int) const"},
 };
 }  // namespace
 

@@ -114,10 +114,11 @@ unchanged.
 - Grammar covered: nested names, template-ids (type, literal, and dependent
   expression arguments), builtins, pointer/reference/rvalue-reference/array/cv
   types, function types and pointers/references to them, pointer-to-member,
-  operator names, constructor/destructor names, template parameters (`T_`), and
-  substitutions. Not yet handled: `decltype`, pack expansion, special names
-  (vtable/typeinfo/thunks), local names/lambdas, vendor/abi-tag extensions, and
-  the remaining `<expression>` forms (casts, scope resolution, member access).
+  operator names, constructor/destructor names, template parameters (`T_`),
+  special names (vtable/typeinfo/typeinfo-name/VTT/thunks), and substitutions.
+  Not yet handled: `decltype`, pack expansion, guard variables, local
+  names/lambdas, vendor/abi-tag extensions, and the remaining `<expression>`
+  forms (casts, scope resolution, member access).
 - The template return type is parsed but intentionally not rendered (matches the
   source tool: template functions drop the leading return type).
 - Array element spacing is presentation-only and follows the source tool:
