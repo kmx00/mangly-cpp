@@ -1,0 +1,19 @@
+# Build output
+/build/
+/build-*/
+cmake-build-*/
+
+# Stray object / binary artifacts
+*.o
+*.obj
+*.a
+*.lib
+*.exe
+*.pdb
+*.ilk
+*.exp
+
+# Editor / IDE
+.vs/
+.vscode/
+.idea/

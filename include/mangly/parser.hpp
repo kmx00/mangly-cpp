@@ -1,0 +1,611 @@
+// Recursive-descent parser for Itanium C++ ABI mangled names.
+//
+// No exceptions: every production returns a Node* and yields nullptr once the
+// parser latches failure (peek at parser.error() for a static diagnostic). AST
+// nodes and their child arrays are bump-allocated from a caller-supplied Arena;
+// StringViews reference the input, which must outlive the AST. The substitution
+// table is just a growable array of node pointers, resolving S_/S0_/S1_ exactly
+// as a conforming producer emitted them.
+#ifndef MANGLY_PARSER_HPP
+#define MANGLY_PARSER_HPP
+
+#include <cstdint>
+
+#include "mangly/nodes.hpp"
+#include "mangly/support.hpp"
+
+namespace mangly {
+
+namespace detail {
+
+inline bool is_digit(char c) { return c >= '0' && c <= '9'; }
+
+// std:: substitution abbreviations (St, Sa, ...). Expand to a fixed spelling and
+// are NOT entered into the substitution table.
+inline const char* std_abbrev(char c) {
+    switch (c) {
+        case 't': return "std";
+        case 'a': return "std::allocator";
+        case 'b': return "std::basic_string";
+        case 's': return "std::string";
+        case 'i': return "std::istream";
+        case 'o': return "std::ostream";
+        case 'd': return "std::iostream";
+        default: return nullptr;
+    }
+}
+
+inline std::uint32_t from_base36(StringView s) {
+    std::uint32_t value = 0;
+    for (std::uint32_t k = 0; k < s.size; ++k) {
+        char ch = s.data[k];
+        int d;
+        if (ch >= '0' && ch <= '9') d = ch - '0';
+        else if (ch >= 'A' && ch <= 'Z') d = ch - 'A' + 10;
+        else if (ch >= 'a' && ch <= 'z') d = ch - 'a' + 10;
+        else d = 0;
+        value = value * 36 + static_cast<std::uint32_t>(d);
+    }
+    return value;
+}
+
+}  // namespace detail
+
+class Parser {
+public:
+    Parser(const char* s, std::uint32_t n, Arena& arena)
+        : s_(s), n_(n), arena_(arena) {}
+
+    // Returns the root node, or nullptr on failure.
+    const Node* parse() {
+        if (n_ < 2 || s_[0] != '_' || s_[1] != 'Z') {
+            return fail("not a _Z mangled name");
+        }
+        i_ = 2;
+        const Node* node = parse_encoding();
+        if (!node) return nullptr;
+        if (!at_end()) return fail("trailing input");
+        return node;
+    }
+
+    bool failed() const { return failed_; }
+    const char* error() const { return error_; }
+
+private:
+    // ------------------------------------------------------------------ cursor
+    char peek() const { return i_ < n_ ? s_[i_] : '\0'; }
+    char peek2() const { return i_ + 1 < n_ ? s_[i_ + 1] : '\0'; }
+    bool at_end() const { return i_ >= n_; }
+    char take() { return s_[i_++]; }
+
+    const Node* fail(const char* msg) {
+        if (!failed_) {
+            failed_ = true;
+            error_ = msg;
+        }
+        return nullptr;
+    }
+
+    void expect(char c) {
+        if (peek() != c) {
+            fail("unexpected character");
+            return;
+        }
+        ++i_;
+    }
+
+    const Node* add_sub(const Node* n) {
+        if (!n) return fail("out of memory");
+        subs_.push(n);
+        return n;
+    }
+
+    const Node* sub_at(std::uint32_t idx) {
+        if (idx >= subs_.size()) return fail("substitution index out of range");
+        return subs_[idx];
+    }
+
+    // --------------------------------------------------------------- builders
+    const Node* new_builtin(StringView code) {
+        Node* n = make_node(arena_, Kind::Builtin);
+        if (!n) return fail("out of memory");
+        n->builtin.code = code;
+        return n;
+    }
+    const Node* new_source(StringView text) {
+        Node* n = make_node(arena_, Kind::SourceName);
+        if (!n) return fail("out of memory");
+        n->source.text = text;
+        return n;
+    }
+    const Node* new_qual(const Node* const* parts, std::uint32_t nparts) {
+        Node* n = make_node(arena_, Kind::QualifiedName);
+        if (!n) return fail("out of memory");
+        n->qual.parts = parts;
+        n->qual.nparts = nparts;
+        return n;
+    }
+    const Node* new_qual1(const Node* comp) {
+        const Node** arr = arena_.alloc<const Node*>(1);
+        if (!arr) return fail("out of memory");
+        arr[0] = comp;
+        return new_qual(arr, 1);
+    }
+    const Node* new_tmpl(const Node* name, const Node* const* args,
+                         std::uint32_t nargs) {
+        Node* n = make_node(arena_, Kind::TemplateId);
+        if (!n) return fail("out of memory");
+        n->tmpl.name = name;
+        n->tmpl.args = args;
+        n->tmpl.nargs = nargs;
+        return n;
+    }
+    const Node* new_ref(Kind k, const Node* inner) {
+        Node* n = make_node(arena_, k);
+        if (!n) return fail("out of memory");
+        n->ref.inner = inner;
+        return n;
+    }
+    const Node* new_cv(const Node* inner, StringView quals) {
+        Node* n = make_node(arena_, Kind::CVQualified);
+        if (!n) return fail("out of memory");
+        n->cv.inner = inner;
+        n->cv.quals = quals;
+        return n;
+    }
+    const Node* new_operator(StringView code, const Node* type) {
+        Node* n = make_node(arena_, Kind::OperatorName);
+        if (!n) return fail("out of memory");
+        n->oper.code = code;
+        n->oper.type = type;
+        return n;
+    }
+    const Node* new_ctordtor(StringView code) {
+        Node* n = make_node(arena_, Kind::CtorDtor);
+        if (!n) return fail("out of memory");
+        n->ctordtor.code = code;
+        return n;
+    }
+    const Node* new_literal(const Node* type, StringView value) {
+        Node* n = make_node(arena_, Kind::Literal);
+        if (!n) return fail("out of memory");
+        n->literal.type = type;
+        n->literal.value = value;
+        return n;
+    }
+    const Node* new_function_type(const Node* ret, const Node* const* params,
+                                  std::uint32_t nparams) {
+        Node* n = make_node(arena_, Kind::FunctionType);
+        if (!n) return fail("out of memory");
+        n->func_type.ret = ret;
+        n->func_type.params = params;
+        n->func_type.nparams = nparams;
+        return n;
+    }
+    const Node* new_member_pointer(const Node* cls, const Node* pointee) {
+        Node* n = make_node(arena_, Kind::MemberPointer);
+        if (!n) return fail("out of memory");
+        n->memptr.cls = cls;
+        n->memptr.pointee = pointee;
+        return n;
+    }
+
+    // Copy a scratch pointer list into a stable arena array (nullptr if empty).
+    const Node* const* dup(const Vec<const Node*>& v) {
+        std::uint32_t count = v.size();
+        if (count == 0) return nullptr;
+        const Node** arr = arena_.alloc<const Node*>(count);
+        if (!arr) {
+            fail("out of memory");
+            return nullptr;
+        }
+        std::memcpy(arr, v.data(), sizeof(const Node*) * count);
+        return arr;
+    }
+
+    // ---------------------------------------------------------------- encoding
+    const Node* parse_encoding() {
+        pending_cv_ = StringView{};
+        pending_ref_ = 0;
+        const Node* name = parse_name();
+        if (!name) return nullptr;
+        // The nested-name's leading cv/ref-qualifiers (member-fn `this`) are
+        // captured now, before parsing param types clobbers the pending slots.
+        StringView this_quals = pending_cv_;
+        char ref_qual = pending_ref_;
+        if (at_end()) return name;  // data name (no bare-function-type)
+
+        const Node* ret = nullptr;
+        if (name->kind == Kind::TemplateId) {
+            ret = parse_type();  // template functions encode a leading return type
+            if (!ret) return nullptr;
+        }
+
+        Vec<const Node*> params;
+        while (!at_end()) {
+            const Node* p = parse_type();
+            if (!p) return nullptr;
+            params.push(p);
+        }
+        if (params.failed()) return fail("out of memory");
+
+        // A lone 'void' parameter denotes an empty parameter list: f(void).
+        bool lone_void = params.size() == 1 &&
+                         params[0]->kind == Kind::Builtin &&
+                         params[0]->builtin.code.size == 1 &&
+                         params[0]->builtin.code.data[0] == 'v';
+
+        Node* fn = make_node(arena_, Kind::Function);
+        if (!fn) return fail("out of memory");
+        fn->func.name = name;
+        fn->func.ret = ret;
+        fn->func.this_quals = this_quals;
+        fn->func.ref_qual = ref_qual;
+        if (lone_void || params.size() == 0) {
+            fn->func.params = nullptr;
+            fn->func.nparams = 0;
+        } else {
+            const Node* const* arr = dup(params);
+            if (!arr) return nullptr;
+            fn->func.params = arr;
+            fn->func.nparams = params.size();
+        }
+        return fn;
+    }
+
+    // -------------------------------------------------------------------- names
+    const Node* parse_name() {
+        char c = peek();
+        if (c == 'N') return parse_nested_name(/*as_type=*/false);
+        if (c == 'S') {
+            const Node* base = parse_substitution();
+            if (!base) return nullptr;
+            if (peek() == 'I') return template_wrap(base);
+            return base;
+        }
+        const Node* base = parse_unqualified_name();
+        if (!base) return nullptr;
+        const Node* qn = new_qual1(base);
+        if (!qn) return nullptr;
+        // An unscoped <unqualified-name> at encoding level is NOT a substitution
+        // candidate; only an <unscoped-template-name> (before its args) is.
+        if (peek() == 'I') {
+            if (!add_sub(qn)) return nullptr;
+            return template_wrap(qn);
+        }
+        return qn;
+    }
+
+    // Wrap `base` in a template-id from the args starting at 'I', registering it.
+    const Node* template_wrap(const Node* base) {
+        std::uint32_t nargs = 0;
+        const Node* const* args = parse_template_args(nargs);
+        if (failed_) return nullptr;
+        return add_sub(new_tmpl(base, args, nargs));
+    }
+
+    const Node* parse_nested_name(bool as_type) {
+        expect('N');
+        if (failed_) return nullptr;
+        std::uint32_t cv_start = i_;
+        while (peek() == 'r' || peek() == 'V' || peek() == 'K') take();  // cv
+        StringView local_cv{s_ + cv_start, i_ - cv_start};
+        char local_ref = 0;
+        if (peek() == 'R' || peek() == 'O') local_ref = take();          // ref
+        const Node* sofar = nullptr;
+        for (;;) {
+            char c = peek();
+            if (at_end()) return fail("unterminated nested-name");
+            if (c == 'E') {
+                take();
+                break;
+            }
+            if (c == 'I') {
+                if (!sofar) return fail("template-id without prefix");
+                std::uint32_t nargs = 0;
+                const Node* const* args = parse_template_args(nargs);
+                if (failed_) return nullptr;
+                sofar = add_sub(new_tmpl(sofar, args, nargs));
+                if (!sofar) return nullptr;
+                continue;
+            }
+            if (c == 'S') {
+                sofar = parse_substitution();  // a substitution restarts the chain
+                if (!sofar) return nullptr;
+                continue;
+            }
+            const Node* comp = parse_unqualified_name();
+            if (!comp) return nullptr;
+            if (!sofar) {
+                sofar = new_qual1(comp);
+            } else if (sofar->kind == Kind::QualifiedName) {
+                std::uint32_t m = sofar->qual.nparts;
+                const Node** arr = arena_.alloc<const Node*>(m + 1);
+                if (!arr) return fail("out of memory");
+                std::memcpy(arr, sofar->qual.parts, sizeof(const Node*) * m);
+                arr[m] = comp;
+                sofar = new_qual(arr, m + 1);
+            } else {
+                const Node** arr = arena_.alloc<const Node*>(2);
+                if (!arr) return fail("out of memory");
+                arr[0] = sofar;
+                arr[1] = comp;
+                sofar = new_qual(arr, 2);
+            }
+            // The final component of a nested-name is a substitution only when
+            // the name is a class-enum type or a template-prefix (peek=='I'/next
+            // component). A bare function/data name is never entered.
+            if (as_type || peek() != 'E') {
+                if (!add_sub(sofar)) return nullptr;
+            }
+        }
+        if (!sofar) return fail("empty nested-name");
+        pending_cv_ = local_cv;    // publish only on success (after nested calls)
+        pending_ref_ = local_ref;
+        return sofar;
+    }
+
+    const Node* parse_unqualified_name() {
+        char c = peek();
+        if (detail::is_digit(c)) return parse_source_name();
+        // constructor / destructor: C1/C2/C3, D0/D1/D2 (2-char forms).
+        if ((c == 'C' || c == 'D') && detail::is_digit(peek2())) {
+            StringView code{s_ + i_, 2};
+            i_ += 2;
+            return new_ctordtor(code);
+        }
+        // operator names (incl. "cv <type>" and "li <source-name>").
+        if (is_operator_code(c, peek2())) return parse_operator_name();
+        return fail("unsupported unqualified-name");
+    }
+
+    const Node* parse_operator_name() {
+        StringView code{s_ + i_, 2};
+        char a = take();
+        char b = take();
+        if (a == 'c' && b == 'v') {  // conversion operator: cv <type>
+            const Node* t = parse_type();
+            if (!t) return nullptr;
+            return new_operator(code, t);
+        }
+        if (a == 'l' && b == 'i') {  // literal operator: li <source-name>
+            const Node* nm = parse_source_name();
+            if (!nm) return nullptr;
+            return new_operator(code, nm);
+        }
+        return new_operator(code, nullptr);
+    }
+
+    const Node* parse_source_name() {
+        if (!detail::is_digit(peek())) return fail("expected source-name length");
+        std::size_t len = 0;
+        while (detail::is_digit(peek())) {
+            len = len * 10 + static_cast<std::size_t>(take() - '0');
+        }
+        if (static_cast<std::size_t>(i_) + len > n_) {
+            return fail("source-name length overruns input");
+        }
+        StringView t{s_ + i_, static_cast<std::uint32_t>(len)};
+        i_ += static_cast<std::uint32_t>(len);
+        return new_source(t);
+    }
+
+    // -------------------------------------------------------------- templates
+    const Node* const* parse_template_args(std::uint32_t& count) {
+        count = 0;
+        expect('I');
+        if (failed_) return nullptr;
+        Vec<const Node*> args;
+        while (peek() != 'E') {
+            if (at_end()) {
+                fail("unterminated template-args");
+                return nullptr;
+            }
+            const Node* a = parse_template_arg();
+            if (!a) return nullptr;
+            args.push(a);
+        }
+        expect('E');
+        if (failed_ || args.failed()) return nullptr;
+        count = args.size();
+        return dup(args);
+    }
+
+    // A template argument is a type or an <expr-primary> literal (L <type> v E).
+    const Node* parse_template_arg() {
+        if (peek() == 'L') return parse_literal();
+        return parse_type();
+    }
+
+    const Node* parse_literal() {
+        expect('L');
+        if (failed_) return nullptr;
+        const Node* t = parse_type();
+        if (!t) return nullptr;
+        std::uint32_t start = i_;
+        while (peek() != 'E') {
+            if (at_end()) return fail("unterminated literal");
+            take();
+        }
+        StringView value{s_ + start, i_ - start};
+        expect('E');
+        if (failed_) return nullptr;
+        return new_literal(t, value);  // literals are not substitutable
+    }
+
+    // ------------------------------------------------------------------- types
+    const Node* parse_type() {
+        char c = peek();
+        if (c == 'N') return parse_nested_name(/*as_type=*/true);
+        if (c == 'S') {
+            const Node* base = parse_substitution();
+            if (!base) return nullptr;
+            if (peek() == 'I') return template_wrap(base);
+            return base;
+        }
+        if (c == 'D' && i_ + 1 < n_ && is_builtin_d_code(s_[i_ + 1])) {
+            StringView code{s_ + i_, 2};
+            i_ += 2;
+            return new_builtin(code);  // builtins are never substitutions
+        }
+        if (is_builtin_code(c)) {
+            StringView code{s_ + i_, 1};
+            take();
+            return new_builtin(code);
+        }
+        if (c == 'P') {
+            take();
+            const Node* inner = parse_type();
+            if (!inner) return nullptr;
+            return add_sub(new_ref(Kind::Pointer, inner));
+        }
+        if (c == 'R') {
+            take();
+            const Node* inner = parse_type();
+            if (!inner) return nullptr;
+            return add_sub(new_ref(Kind::LValueRef, inner));
+        }
+        if (c == 'O') {
+            take();
+            const Node* inner = parse_type();
+            if (!inner) return nullptr;
+            return add_sub(new_ref(Kind::RValueRef, inner));
+        }
+        if (c == 'A') return parse_array();
+        if (c == 'F') return parse_function_type();
+        if (c == 'M') {
+            take();
+            const Node* cls = parse_type();
+            if (!cls) return nullptr;
+            const Node* pointee = parse_type();
+            if (!pointee) return nullptr;
+            return add_sub(new_member_pointer(cls, pointee));
+        }
+        if (c == 'K' || c == 'V' || c == 'r') {
+            std::uint32_t start = i_;
+            while (peek() == 'K' || peek() == 'V' || peek() == 'r') take();
+            StringView quals{s_ + start, i_ - start};
+            const Node* inner = parse_type();
+            if (!inner) return nullptr;
+            return add_sub(new_cv(inner, quals));
+        }
+        if (detail::is_digit(c)) {
+            const Node* sn = parse_source_name();
+            if (!sn) return nullptr;
+            const Node* qn = new_qual1(sn);
+            if (!add_sub(qn)) return nullptr;
+            if (peek() == 'I') return template_wrap(qn);
+            return qn;
+        }
+        return fail("unsupported type");
+    }
+
+    const Node* parse_array() {
+        expect('A');
+        if (failed_) return nullptr;
+        bool has_dim = false;
+        StringView dim{};
+        if (peek() == '_') {
+            take();
+        } else if (detail::is_digit(peek())) {
+            std::uint32_t start = i_;
+            while (detail::is_digit(peek())) take();
+            dim = StringView{s_ + start, i_ - start};
+            has_dim = true;
+            expect('_');
+            if (failed_) return nullptr;
+        } else {  // a dimension expression; retained verbatim as the bound
+            std::uint32_t start = i_;
+            while (peek() != '_' && !at_end()) take();
+            dim = StringView{s_ + start, i_ - start};
+            has_dim = true;
+            expect('_');
+            if (failed_) return nullptr;
+        }
+        bool elem_is_sub = peek() == 'S';
+        const Node* inner = parse_type();
+        if (!inner) return nullptr;
+        Node* n = make_node(arena_, Kind::Array);
+        if (!n) return fail("out of memory");
+        n->array.inner = inner;
+        n->array.dim = dim;
+        n->array.has_dim = has_dim;
+        n->array.elem_is_sub = elem_is_sub;
+        return add_sub(n);
+    }
+
+    const Node* parse_function_type() {
+        expect('F');
+        if (failed_) return nullptr;
+        if (peek() == 'Y') take();  // extern "C" flag (ignored, rare)
+        const Node* ret = parse_type();
+        if (!ret) return nullptr;
+        Vec<const Node*> params;
+        while (peek() != 'E') {
+            if (at_end()) return fail("unterminated function type");
+            const Node* p = parse_type();
+            if (!p) return nullptr;
+            params.push(p);
+        }
+        expect('E');
+        if (failed_ || params.failed()) return nullptr;
+        bool lone_void = params.size() == 1 &&
+                         params[0]->kind == Kind::Builtin &&
+                         params[0]->builtin.code.size == 1 &&
+                         params[0]->builtin.code.data[0] == 'v';
+        const Node* const* arr = nullptr;
+        std::uint32_t np = 0;
+        if (!lone_void && params.size() > 0) {
+            arr = dup(params);
+            if (!arr) return nullptr;
+            np = params.size();
+        }
+        return add_sub(new_function_type(ret, arr, np));
+    }
+
+    const Node* parse_substitution() {
+        expect('S');
+        if (failed_) return nullptr;
+        char c = peek();
+        if (c == '_') {
+            take();
+            return sub_at(0);
+        }
+        if (const char* ab = detail::std_abbrev(c)) {
+            take();
+            return new_source(make_sv(ab));  // not a table entry
+        }
+        std::uint32_t start = i_;
+        while (peek() != '_') {
+            if (at_end()) return fail("unterminated substitution");
+            take();
+        }
+        StringView seq{s_ + start, i_ - start};
+        take();  // consume '_'
+        return sub_at(detail::from_base36(seq) + 1);
+    }
+
+    const char* s_;
+    std::uint32_t n_;
+    std::uint32_t i_ = 0;
+    Arena& arena_;
+    Vec<const Node*> subs_;
+    bool failed_ = false;
+    const char* error_ = nullptr;
+    // Scratch for the current nested-name's this-qualifiers, published on the
+    // successful return of parse_nested_name and read by parse_encoding.
+    StringView pending_cv_{};
+    char pending_ref_ = 0;
+};
+
+// Convenience: parse `mangled` (length `len`) into `arena`.
+inline const Node* parse(const char* mangled, std::uint32_t len, Arena& arena) {
+    return Parser(mangled, len, arena).parse();
+}
+inline const Node* parse(const char* mangled, Arena& arena) {
+    return parse(mangled, static_cast<std::uint32_t>(std::strlen(mangled)), arena);
+}
+
+}  // namespace mangly
+
+#endif  // MANGLY_PARSER_HPP
