@@ -118,8 +118,10 @@ unchanged.
   template parameters, special names (vtable/VTT/typeinfo/construction-vtable/
   thunks), `decltype`, local names, guard variables, lambda/unnamed closures,
   function-parameter and fold expressions, variadic packs (`sizeof...`), abi-tags,
-  member-access and cast expressions, and substitutions. Not yet handled: a few
-  rare `<expression>` leaves (new/delete, typeid) and unusual vendor extensions.
+  member-access/cast/named-cast/`new`/scope-resolution expressions, pointer and
+  function-pointer non-type template arguments, and substitutions. Not yet
+  handled: a few rare `<expression>` leaves (`delete`, `typeid`) and unusual
+  vendor extensions.
 - The template return type is parsed but intentionally not rendered (matches the
   source tool: template functions drop the leading return type).
 - Array element spacing is presentation-only and follows the source tool:

@@ -419,6 +419,11 @@ private:
                 mangle_operand(node->fold.a);
                 if (node->fold.b) mangle_operand(node->fold.b);
                 return;  // folds are not substitutable
+            case Kind::MangledName:  // L <mangled-name> E (not substitutable)
+                out_.append("L_Z");
+                mangle_body(node->mangled.encoding);
+                out_.push('E');
+                return;
             default:
                 fail();
                 return;
@@ -436,6 +441,21 @@ private:
             (op.data[0] == 'd' || op.data[0] == 'p') && e->expr.noperands == 2) {
             mangle_operand(e->expr.operands[0]);
             mangle_prefix_part(e->expr.operands[1]);
+            return;
+        }
+        // sr: <type> <source-name>  (scope resolution; member is a name)
+        if (op.size == 2 && op.data[0] == 's' && op.data[1] == 'r' &&
+            e->expr.noperands == 2) {
+            mangle_operand(e->expr.operands[0]);
+            mangle_prefix_part(e->expr.operands[1]);
+            return;
+        }
+        // nw/na: '_' <type> E  (no-initializer new; op already emitted)
+        if (op.size == 2 && op.data[0] == 'n' &&
+            (op.data[1] == 'w' || op.data[1] == 'a') && e->expr.noperands == 1) {
+            out_.push('_');
+            mangle_type(e->expr.operands[0]);
+            out_.push('E');
             return;
         }
         for (std::uint32_t i = 0; i < e->expr.noperands; ++i) {
