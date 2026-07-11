@@ -47,6 +47,9 @@ enum class Kind : std::uint8_t {
     Pack,           // J <template-args> E  (argument pack)
     PackExpansion,  // Dp <type>  (pack expansion pattern)
     AbiTag,         // <name> B <source-name>  (abi tag)
+    VectorType,     // Dv <num> _ <type>  (vendor vector)
+    Vendor,         // u <source-name>  (vendor-extended type)
+    Fold,           // fl/fr/fL/fR  (fold expression)
 };
 
 struct Node {
@@ -120,7 +123,8 @@ struct Node {
         struct {
             StringView code;   // "TV"/"TI"/"TS"/"TT" or thunk "Th"/"Tv"/"Tc"
             StringView extra;  // thunk offset spec (verbatim); empty otherwise
-            const Node* inner; // the type (TV..) or base encoding (thunk)
+            const Node* inner; // the type (TV..) / base encoding (thunk) / TC "in" type
+            const Node* inner2; // second type for construction vtable (TC)
         } special;
         struct {
             const Node* expr;
@@ -151,6 +155,19 @@ struct Node {
             const Node* inner;
             StringView tag;
         } abitag;
+        struct {
+            const Node* elem;
+            StringView num;  // dimension (verbatim)
+        } vec;
+        struct {
+            StringView name;  // vendor-extended type name
+        } vendor;
+        struct {
+            StringView kind;  // "fl"/"fr"/"fL"/"fR"
+            StringView op;    // fold operator code, e.g. "pl"
+            const Node* a;    // pack (unary) or first operand (binary)
+            const Node* b;    // second operand (binary), else null
+        } fold;
     };
 };
 
@@ -513,6 +530,14 @@ inline void render(const Node* n, OutputBuffer& o) {
                 else if (a == 'T' && b == 'c') phrase = "covariant return thunk to ";
                 else if (a == 'G' && b == 'V') phrase = "guard variable for ";
             }
+            if (c.size == 2 && c.data[0] == 'T' && c.data[1] == 'C') {
+                // construction vtable for <inner2>-in-<inner>
+                o.append("construction vtable for ");
+                render(n->special.inner2, o);
+                o.append("-in-");
+                render(n->special.inner, o);
+                return;
+            }
             o.append(phrase);
             render(n->special.inner, o);
             return;
@@ -585,6 +610,38 @@ inline void render(const Node* n, OutputBuffer& o) {
             o.append(n->abitag.tag);
             o.push(']');
             return;
+        case Kind::VectorType:
+            render(n->vec.elem, o);
+            o.append(" __vector(");
+            o.append(n->vec.num);
+            o.push(')');
+            return;
+        case Kind::Vendor:
+            o.append(n->vendor.name);
+            return;
+        case Kind::Fold: {
+            const char* sym = operator_symbol(n->fold.op);
+            if (!sym) sym = "?";
+            char k = n->fold.kind.size == 2 ? n->fold.kind.data[1] : 0;
+            o.push('(');
+            if (k == 'l') {  // unary left: (... op a)
+                o.append("...");
+                o.append(sym);
+                render(n->fold.a, o);
+            } else if (k == 'r') {  // unary right: (a op ...)
+                render(n->fold.a, o);
+                o.append(sym);
+                o.append("...");
+            } else {  // binary (fL/fR): (a op ... op b)
+                render(n->fold.a, o);
+                o.append(sym);
+                o.append("...");
+                o.append(sym);
+                render(n->fold.b, o);
+            }
+            o.push(')');
+            return;
+        }
     }
 }
 
@@ -791,7 +848,8 @@ inline bool structurally_equal(const Node* a, const Node* b) {
         case Kind::SpecialName:
             return sv_equal(a->special.code, b->special.code) &&
                    sv_equal(a->special.extra, b->special.extra) &&
-                   structurally_equal(a->special.inner, b->special.inner);
+                   structurally_equal(a->special.inner, b->special.inner) &&
+                   structurally_equal(a->special.inner2, b->special.inner2);
         case Kind::Decltype:
             return a->decl_type.id_form == b->decl_type.id_form &&
                    structurally_equal(a->decl_type.expr, b->decl_type.expr);
@@ -826,6 +884,16 @@ inline bool structurally_equal(const Node* a, const Node* b) {
         case Kind::AbiTag:
             return sv_equal(a->abitag.tag, b->abitag.tag) &&
                    structurally_equal(a->abitag.inner, b->abitag.inner);
+        case Kind::VectorType:
+            return sv_equal(a->vec.num, b->vec.num) &&
+                   structurally_equal(a->vec.elem, b->vec.elem);
+        case Kind::Vendor:
+            return sv_equal(a->vendor.name, b->vendor.name);
+        case Kind::Fold:
+            return sv_equal(a->fold.kind, b->fold.kind) &&
+                   sv_equal(a->fold.op, b->fold.op) &&
+                   structurally_equal(a->fold.a, b->fold.a) &&
+                   structurally_equal(a->fold.b, b->fold.b);
     }
     return false;
 }

@@ -18,7 +18,7 @@
       (not `N...E`); non-canonical `N...E` normalizes on remangle
 - [x] generated ground-truth corpus: `tools/gen_corpus.py` compiles weird-but-
       legal signatures with a real Itanium compiler and extracts `nm` symbols to
-      `tests/corpus.txt`; every symbol parses + re-mangles byte-exact (377 syms)
+      `tests/corpus.txt`; every symbol parses + re-mangles byte-exact (412 syms)
 - [x] broadened grammar (all validated byte-exact via the corpus):
   - [x] operator names (full table incl. `cv` conversion, `li` literal)
   - [x] constructor/destructor names (`C1/C2`, `D1/D2`)
@@ -42,25 +42,30 @@
   - [x] **variadic templates**: pack expansion (`Dp`), argument packs (`J..E`),
         `sizeof...` (`sZ`); **abi-tags** (`B`); expression **member access**
         (`dt`/`pt`) and **casts** (`cv`)
+  - [x] **fold expressions** (`fl`/`fr`/`fL`/`fR`), **construction vtables**
+        (`TC`), **virtual thunks** (`Tv`), **vector types** (`Dv`),
+        **vendor-extended types** (`u`), and **template-param prefixes**
+        (`typename T::type`)
 - [x] `mangly` CLI (args/stdin; `-r/--remangle`), cstdlib I/O
 - [x] pure-C++ test harness (no framework dep); builds+passes on MSVC and g++
 
 ### notes / known limits
-- Grammar covered: nested names, template-ids (type / literal / expression args),
-  builtins, pointer/reference/array/cv types, function types, pointer-to-member,
-  operator and ctor/dtor names, template parameters, special names (vtable/
-  typeinfo/typeinfo-name/VTT/thunks), decltype, local names, guard variables,
-  lambda/unnamed closures, function-parameter expressions, variadic packs
-  (`Dp`/`J`/`sZ`), abi-tags, member-access & cast expressions, substitutions.
-- NOT yet: vendor-extended types (`u`), fold expressions (`fl`/`fr`), and a few
-  rarer `<expression>` forms (scope-resolution `sr`, new/delete, typeid).
-  Pattern pack-expansion (e.g. `Dp P T_`) and `sizeof...` render approximately
+- Grammar covered: essentially the full Itanium `<encoding>` surface produced by
+  g++/clang -- nested names, all template-argument forms (type/literal/
+  expression/pack), builtins & vendor/vector types, pointer/reference/array/cv/
+  function/member-pointer types, operators, ctor/dtor, template parameters,
+  special names (vtable/VTT/typeinfo/construction-vtable/thunks), decltype, local
+  names/lambdas/guard variables, fold expressions, abi-tags, and substitutions.
+- NOT yet: a few rare `<expression>` leaves (new/delete, typeid, ternary in some
+  positions) and unusual vendor extensions.
+- Pattern pack-expansion (e.g. `Dp P T_`) and `sizeof...` render approximately
   (byte-exact remangle is unaffected).
 - Template return type parsed but not rendered; array element spacing is
   presentation-only (`Elem[]` for a substitution element, `Elem []` otherwise).
 
-## next (continue until IDA-level, few assumptions)
-- decltype + pack expansion; guard variables + local names + lambdas; vendor
-  types + abi-tags; broaden `<expression>` (casts, sr, dt/pt member access).
-- grow `tools/gen_corpus.py` per feature (it gates each construct behind a real-
+## next
+- v0.0.2: broaden CLI (batch/CSV modes), harden fuzz coverage, and add the
+  remaining rare `<expression>` leaves (new/delete, typeid) as grounded samples
+  appear. The demangler now covers the constructs g++/clang emit for real code.
+- keep growing `tools/gen_corpus.py` (it gates each construct behind a real-
   compiler byte-exact check).

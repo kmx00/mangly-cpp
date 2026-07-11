@@ -46,6 +46,11 @@ private:
         if (k == 'h' || k == 'v' || k == 'c') {  // thunk: offset spec + base
             out_.append(n->special.extra);
             mangle_body(n->special.inner);
+        } else if (k == 'C') {  // construction vtable: TC <type> <num> _ <type>
+            mangle_type(n->special.inner);
+            out_.append(n->special.extra);
+            out_.push('_');
+            mangle_type(n->special.inner2);
         } else if (n->special.code.size == 2 && n->special.code.data[0] == 'G') {
             mangle_name(n->special.inner);  // guard variable wraps a <name>
         } else {  // TV/TI/TS/TT: a type
@@ -183,6 +188,13 @@ private:
         qn->qual.nparts = n;
         if (try_sub(qn)) return;
         if (n == 1) {
+            // A template-param (or decltype) prefix base is substitutable AS
+            // ITSELF (T_/Dt..), not wrapped in a QN; emit via mangle_type.
+            if (parts[0]->kind == Kind::TemplateParam ||
+                parts[0]->kind == Kind::Decltype) {
+                mangle_type(parts[0]);
+                return;
+            }
             mangle_prefix_part(parts[0]);
         } else {
             mangle_prefix(parts, n - 1);
@@ -388,6 +400,25 @@ private:
                 mangle_type(node->pack_exp.pattern);
                 add_sub(node);
                 return;
+            case Kind::VectorType:
+                out_.append("Dv");
+                out_.append(node->vec.num);
+                out_.push('_');
+                mangle_type(node->vec.elem);
+                add_sub(node);
+                return;
+            case Kind::Vendor:
+                out_.push('u');
+                out_.append_uint(node->vendor.name.size);
+                out_.append(node->vendor.name);
+                add_sub(node);
+                return;
+            case Kind::Fold:
+                out_.append(node->fold.kind);
+                out_.append(node->fold.op);
+                mangle_operand(node->fold.a);
+                if (node->fold.b) mangle_operand(node->fold.b);
+                return;  // folds are not substitutable
             default:
                 fail();
                 return;
