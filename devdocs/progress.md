@@ -18,7 +18,7 @@
       (not `N...E`); non-canonical `N...E` normalizes on remangle
 - [x] generated ground-truth corpus: `tools/gen_corpus.py` compiles weird-but-
       legal signatures with a real Itanium compiler and extracts `nm` symbols to
-      `tests/corpus.txt`; every symbol parses + re-mangles byte-exact (425 syms)
+      `tests/corpus.txt`; every symbol parses + re-mangles byte-exact (436 syms)
 - [x] broadened grammar (all validated byte-exact via the corpus):
   - [x] operator names (full table incl. `cv` conversion, `li` literal)
   - [x] constructor/destructor names (`C1/C2`, `D1/D2`)
@@ -52,6 +52,11 @@
         expression** (`sp`), and the **nullptr literal** (`LDnE`)
   - [x] **`delete`** (`dl`/`da`) expressions and the **global-scope prefix**
         (`gs` -> `::new`/`::delete`)
+  - [x] **`std::` substitutions** (`St`/`Sa`/`Ss`/`Sb`/`Si`/`So`/`Sd`, incl. the
+        `St<name>` unscoped form and `__cxx11` abi-tag namespaces) -- fixed a
+        real bug where `St6vector` rendered as `std,vector`
+  - [x] **C++17 noexcept function types** (`Do`/`DO`), rendered ` noexcept`
+  - [x] **reference temporaries** (`_ZGR <name> <seq> _`)
 - [x] `mangly` CLI (args/stdin; `-r/--remangle`), cstdlib I/O
 - [x] pure-C++ test harness (no framework dep); builds+passes on MSVC and g++
 
@@ -59,9 +64,11 @@
 - Grammar covered: essentially the full Itanium `<encoding>` surface produced by
   g++/clang -- nested names, all template-argument forms (type/literal/
   expression/pack), builtins & vendor/vector types, pointer/reference/array/cv/
-  function/member-pointer types, operators, ctor/dtor, template parameters,
-  special names (vtable/VTT/typeinfo/construction-vtable/thunks), decltype, local
-  names/lambdas/guard variables, fold expressions, abi-tags, and substitutions.
+  function/member-pointer types, C++17 noexcept function types, operators,
+  ctor/dtor, template parameters, special names (vtable/VTT/typeinfo/
+  construction-vtable/thunks/reference-temporaries), decltype, local names/
+  lambdas/guard variables, fold expressions, abi-tags, `std::` abbreviations, and
+  substitutions.
 - NOT yet: `typeid`/`noexcept` expressions -- but g++ itself refuses to mangle
   these ("sorry, unimplemented: mangling typeid_expr/noexcept_expr"), so they do
   not occur in real g++ output; placement-`new` initializers; and unusual vendor

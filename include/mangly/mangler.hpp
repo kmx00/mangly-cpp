@@ -52,7 +52,11 @@ private:
             out_.push('_');
             mangle_type(n->special.inner2);
         } else if (n->special.code.size == 2 && n->special.code.data[0] == 'G') {
-            mangle_name(n->special.inner);  // guard variable wraps a <name>
+            mangle_name(n->special.inner);  // GV guard var / GR reference temporary
+            if (n->special.code.data[1] == 'R') {  // GR <name> <seq-id> _
+                out_.append(n->special.extra);
+                out_.push('_');
+            }
         } else {  // TV/TI/TS/TT: a type
             mangle_type(n->special.inner);
         }
@@ -146,6 +150,8 @@ private:
             mangle_template_id(node);
         } else if (node->kind == Kind::QualifiedName) {
             mangle_prefix(node->qual.parts, node->qual.nparts);
+        } else if (node->kind == Kind::SourceName) {
+            mangle_prefix_part(node);  // std abbrev name (Sa/Ss/...); not subbed
         } else {
             fail();
         }
@@ -175,8 +181,33 @@ private:
         out_.push('_');
     }
 
+    // Pre-defined std substitutions: a SourceName carrying the full spelling maps
+    // back to its short code (St/Sa/Ss/Sb/Si/So/Sd). These are NEVER added to the
+    // substitution table (they are built-in), matching the parser.
+    static StringView std_code(const Node* p) {
+        if (!p || p->kind != Kind::SourceName) return StringView{};
+        const StringView t = p->source.text;
+        static const struct { const char* full; const char* code; } tbl[] = {
+            {"std", "St"},          {"std::allocator", "Sa"},
+            {"std::basic_string", "Sb"}, {"std::string", "Ss"},
+            {"std::istream", "Si"}, {"std::ostream", "So"},
+            {"std::iostream", "Sd"},
+        };
+        for (const auto& e : tbl) {
+            std::uint32_t len = static_cast<std::uint32_t>(std::strlen(e.full));
+            if (t.size == len && std::memcmp(t.data, e.full, len) == 0) {
+                return StringView{e.code, 2};
+            }
+        }
+        return StringView{};
+    }
+
     void mangle_prefix(const Node* const* parts, std::uint32_t n) {
         if (failed_) return;
+        if (n == 1 && std_code(parts[0]).size) {
+            mangle_prefix_part(parts[0]);  // pre-defined std abbrev; never subbed
+            return;
+        }
         // Materialize a stable QN for the prefix so it can enter the sub table.
         Node* qn = scratch_.alloc<Node>();
         if (!qn) {
@@ -218,10 +249,16 @@ private:
     void mangle_prefix_part(const Node* part) {
         if (failed_) return;
         switch (part->kind) {
-            case Kind::SourceName:
+            case Kind::SourceName: {
+                StringView ab = std_code(part);
+                if (ab.size) {  // std namespace/abbrev -> St/Sa/Ss/...
+                    out_.append(ab);
+                    return;
+                }
                 out_.append_uint(part->source.text.size);
                 out_.append(part->source.text);
                 return;
+            }
             case Kind::TemplateId:
                 mangle_template_id(part);
                 return;
@@ -300,16 +337,24 @@ private:
                 // a genuinely nested class type -> N...E.
                 if (node->qual.nparts == 1) {
                     mangle_prefix(node->qual.parts, 1);
+                } else if (node->qual.nparts == 2 &&
+                           std_code(node->qual.parts[0]).size) {
+                    mangle_prefix(node->qual.parts, 2);  // St<name> unscoped std::X
                 } else {
                     out_.push('N');
                     mangle_prefix(node->qual.parts, node->qual.nparts);
                     out_.push('E');
                 }
                 return;
-            case Kind::TemplateId:
+            case Kind::TemplateId: {
                 // Unscoped template-id -> `<name><args>` bare; nested -> N...E.
-                if (node->tmpl.name->kind == Kind::QualifiedName &&
-                    node->tmpl.name->qual.nparts == 1) {
+                const Node* nm = node->tmpl.name;
+                bool unscoped =
+                    (nm->kind == Kind::QualifiedName && nm->qual.nparts == 1) ||
+                    std_code(nm).size ||
+                    (nm->kind == Kind::QualifiedName && nm->qual.nparts == 2 &&
+                     std_code(nm->qual.parts[0]).size);
+                if (unscoped) {
                     mangle_template_id(node);
                 } else {
                     out_.push('N');
@@ -317,6 +362,7 @@ private:
                     out_.push('E');
                 }
                 return;
+            }
             case Kind::Pointer:
                 out_.push('P');
                 mangle_type(node->ref.inner);
@@ -345,6 +391,13 @@ private:
                 add_sub(node);
                 return;
             case Kind::FunctionType:
+                if (node->func_type.except.size) {  // Do / DO<expr>E exception-spec
+                    out_.append(node->func_type.except);
+                    if (node->func_type.except_expr) {
+                        mangle_operand(node->func_type.except_expr);
+                        out_.push('E');
+                    }
+                }
                 out_.push('F');
                 mangle_type(node->func_type.ret);
                 if (node->func_type.nparams > 0) {

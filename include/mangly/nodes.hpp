@@ -96,6 +96,8 @@ struct Node {
             const Node* ret;
             const Node* const* params;
             std::uint32_t nparams;
+            StringView except;  // "Do" (noexcept) or empty; DO<expr>E kept raw
+            const Node* except_expr;  // DO <expr> E: the dependent noexcept
         } func_type;  // FunctionType
         struct {
             const Node* cls;
@@ -354,6 +356,17 @@ inline void render_params(const Node* const* params, std::uint32_t n, OutputBuff
     o.push(')');
 }
 
+// Append a function type's exception-spec suffix (` noexcept` / ` noexcept(e)`).
+inline void render_fn_except(const Node* ft, OutputBuffer& o) {
+    if (!ft->func_type.except.size) return;
+    o.append(" noexcept");
+    if (ft->func_type.except_expr) {
+        o.push('(');
+        render(ft->func_type.except_expr, o);
+        o.push(')');
+    }
+}
+
 // Render `target` behind an indirection token `op` ("*", "&", "&&"). Function
 // and array targets take declarator form: `ret (op)(params)`, `elem (op)[dim]`.
 inline void render_indirection(const Node* target, const char* op, OutputBuffer& o) {
@@ -363,6 +376,7 @@ inline void render_indirection(const Node* target, const char* op, OutputBuffer&
         o.append(op);
         o.push(')');
         render_params(target->func_type.params, target->func_type.nparams, o);
+        render_fn_except(target, o);
     } else if (target->kind == Kind::Array) {
         render(target->array.inner, o);
         o.append(" (");
@@ -449,6 +463,7 @@ inline void render(const Node* n, OutputBuffer& o) {
             render(n->func_type.ret, o);
             o.push(' ');
             render_params(n->func_type.params, n->func_type.nparams, o);
+            render_fn_except(n, o);
             return;
         case Kind::MemberPointer: {
             const Node* pt = n->memptr.pointee;
@@ -458,6 +473,7 @@ inline void render(const Node* n, OutputBuffer& o) {
                 render(n->memptr.cls, o);
                 o.append("::*)");
                 render_params(pt->func_type.params, pt->func_type.nparams, o);
+                render_fn_except(pt, o);
             } else if (pt->kind == Kind::Array) {
                 render(pt->array.inner, o);
                 o.append(" (");
@@ -541,6 +557,22 @@ inline void render(const Node* n, OutputBuffer& o) {
                 o.append("construction vtable for ");
                 render(n->special.inner2, o);
                 o.append("-in-");
+                render(n->special.inner, o);
+                return;
+            }
+            if (c.size == 2 && c.data[0] == 'G' && c.data[1] == 'R') {
+                o.append("reference temporary #");
+                std::uint64_t idx = 0;
+                for (std::uint32_t i = 0; i < n->special.extra.size; ++i) {
+                    char ch = n->special.extra.data[i];
+                    std::uint64_t d = (ch >= '0' && ch <= '9') ? (ch - '0')
+                                    : (ch >= 'A' && ch <= 'Z') ? (ch - 'A' + 10)
+                                                               : (ch - 'a' + 10);
+                    idx = idx * 36 + d;
+                }
+                if (n->special.extra.size) idx += 1;  // 0-based seq after the first
+                o.append_uint(idx);
+                o.append(" for ");
                 render(n->special.inner, o);
                 return;
             }
@@ -867,6 +899,9 @@ inline bool structurally_equal(const Node* a, const Node* b) {
         }
         case Kind::FunctionType: {
             if (a->func_type.nparams != b->func_type.nparams) return false;
+            if (!sv_equal(a->func_type.except, b->func_type.except)) return false;
+            if (!structurally_equal(a->func_type.except_expr, b->func_type.except_expr))
+                return false;
             if (!structurally_equal(a->func_type.ret, b->func_type.ret)) return false;
             for (std::uint32_t i = 0; i < a->func_type.nparams; ++i) {
                 if (!structurally_equal(a->func_type.params[i], b->func_type.params[i])) {

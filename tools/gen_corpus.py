@@ -62,6 +62,8 @@ MODS = [
 ]
 
 PREAMBLE = """\
+#include <string>
+#include <vector>
 struct TopClass {};
 namespace ns1 {
   struct Inner {};
@@ -332,6 +334,21 @@ def emit_functions() -> list[str]:
         "template <class T> auto gdelarr(T* p) -> decltype(::delete[] p)"
         " { ::delete[] p; }",
         "template void gdelarr<int>(int*);",
+    ])
+
+    # 13) std:: substitutions (St/Sa/Ss + __cxx11 abi-tag namespaces), C++17
+    # noexcept function types (Do), and a reference temporary (_ZGR).
+    lines.extend([
+        "void take_ne(void (*)() noexcept) {}",
+        "int call_ne(int (*p)(int) noexcept) { return p(0); }",
+        "template <class T> void tfn_ne(T (*)() noexcept) {}",
+        "template void tfn_ne<int>(int (*)() noexcept);",
+        "const int& g_ref_temp = 42;",
+        "std::string make_str() { return {}; }",
+        "void take_vec(std::vector<int>) {}",
+        "void take_vstr(std::vector<std::string>) {}",
+        "std::basic_string<char>& pick_bstr(std::basic_string<char>& s)"
+        " { return s; }",
     ])
 
     return lines
