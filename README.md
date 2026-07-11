@@ -111,16 +111,15 @@ unchanged.
 
 ## Notes / known limits
 
-- Grammar covered: nested names, template-ids (type, literal, and dependent
-  expression arguments), builtins, pointer/reference/rvalue-reference/array/cv
-  types, function types and pointers/references to them, pointer-to-member,
-  operator names, constructor/destructor names, template parameters (`T_`),
-  special names (vtable/typeinfo/typeinfo-name/VTT/thunks), `decltype`, local
-  names, guard variables, lambda/unnamed closure types, function-parameter
-  expressions, variadic packs (expansion/argument-packs/`sizeof...`), abi-tags,
-  member-access and cast expressions, and substitutions. Not yet handled:
-  vendor-extended types, fold expressions, and a few rarer `<expression>` forms
-  (scope resolution, new/delete, typeid).
+- Grammar covered: essentially the full Itanium `<encoding>` surface emitted by
+  g++/clang -- nested names, all template-argument forms (type/literal/dependent-
+  expression/pack), builtins, vendor & vector types, pointer/reference/rvalue-
+  reference/array/cv/function/member-pointer types, operator and ctor/dtor names,
+  template parameters, special names (vtable/VTT/typeinfo/construction-vtable/
+  thunks), `decltype`, local names, guard variables, lambda/unnamed closures,
+  function-parameter and fold expressions, variadic packs (`sizeof...`), abi-tags,
+  member-access and cast expressions, and substitutions. Not yet handled: a few
+  rare `<expression>` leaves (new/delete, typeid) and unusual vendor extensions.
 - The template return type is parsed but intentionally not rendered (matches the
   source tool: template functions drop the leading return type).
 - Array element spacing is presentation-only and follows the source tool:

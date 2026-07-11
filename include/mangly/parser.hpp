@@ -216,12 +216,37 @@ private:
         n->expr.noperands = noperands;
         return n;
     }
-    const Node* new_special(StringView code, StringView extra, const Node* inner) {
+    const Node* new_special(StringView code, StringView extra, const Node* inner,
+                            const Node* inner2 = nullptr) {
         Node* n = make_node(arena_, Kind::SpecialName);
         if (!n) return fail("out of memory");
         n->special.code = code;
         n->special.extra = extra;
         n->special.inner = inner;
+        n->special.inner2 = inner2;
+        return n;
+    }
+    const Node* new_vector(const Node* elem, StringView num) {
+        Node* n = make_node(arena_, Kind::VectorType);
+        if (!n) return fail("out of memory");
+        n->vec.elem = elem;
+        n->vec.num = num;
+        return n;
+    }
+    const Node* new_vendor(StringView name) {
+        Node* n = make_node(arena_, Kind::Vendor);
+        if (!n) return fail("out of memory");
+        n->vendor.name = name;
+        return n;
+    }
+    const Node* new_fold(StringView kind, StringView op, const Node* a,
+                         const Node* b) {
+        Node* n = make_node(arena_, Kind::Fold);
+        if (!n) return fail("out of memory");
+        n->fold.kind = kind;
+        n->fold.op = op;
+        n->fold.a = a;
+        n->fold.b = b;
         return n;
     }
     const Node* new_decltype(const Node* expr, bool id_form) {
@@ -300,6 +325,18 @@ private:
             const Node* t = parse_type();
             if (!t) return nullptr;
             return new_special(code, StringView{}, t);
+        }
+        if (c == 'C') {  // construction vtable: TC <type> <number> _ <type>
+            const Node* t1 = parse_type();
+            if (!t1) return nullptr;
+            std::uint32_t ns = i_;
+            while (detail::is_digit(peek())) take();
+            StringView num{s_ + ns, i_ - ns};
+            expect('_');
+            if (failed_) return nullptr;
+            const Node* t2 = parse_type();
+            if (!t2) return nullptr;
+            return new_special(make_sv("TC"), num, t1, t2);
         }
         if (c == 'h' || c == 'v' || c == 'c') {
             StringView code{s_ + i_ - 2, 2};
@@ -547,6 +584,12 @@ private:
                 if (!sofar) return nullptr;
                 continue;
             }
+            if (c == 'T' && sofar == nullptr) {
+                // a template-param as the nested-name prefix (e.g. typename T::type)
+                sofar = parse_template_param();
+                if (!sofar) return nullptr;
+                continue;
+            }
             const Node* comp = parse_unqualified_name();
             if (!comp) return nullptr;
             if (!sofar) {
@@ -722,6 +765,27 @@ private:
             if (!pattern) return nullptr;
             return add_sub(new_pack_expansion(pattern));
         }
+        if (c == 'D' && peek2() == 'v') {  // vector type: Dv <num> _ <type>
+            i_ += 2;
+            std::uint32_t ns = i_;
+            while (peek() != '_') {
+                if (at_end()) return fail("unterminated vector type");
+                take();
+            }
+            StringView num{s_ + ns, i_ - ns};
+            take();  // '_'
+            const Node* elem = parse_type();
+            if (!elem) return nullptr;
+            return add_sub(new_vector(elem, num));
+        }
+        if (c == 'u') {  // vendor-extended type: u <source-name>
+            take();
+            const Node* sn = parse_source_name();
+            if (!sn) return nullptr;
+            StringView name = sn->kind == Kind::SourceName ? sn->source.text
+                                                           : StringView{};
+            return add_sub(new_vendor(name));
+        }
         if (c == 'D' && i_ + 1 < n_ && is_builtin_d_code(s_[i_ + 1])) {
             StringView code{s_ + i_, 2};
             i_ += 2;
@@ -893,6 +957,23 @@ private:
             StringView num{s_ + ns, i_ - ns};
             take();  // '_'
             return new_funcparam(num);
+        }
+        if (c == 'f' && (peek2() == 'l' || peek2() == 'r' || peek2() == 'L' ||
+                         peek2() == 'R')) {  // fold expression
+            StringView kind{s_ + i_, 2};
+            i_ += 2;
+            if (i_ + 2 > n_) return fail("truncated fold");
+            StringView op{s_ + i_, 2};
+            i_ += 2;  // 2-char fold operator
+            bool binary = kind.data[1] == 'L' || kind.data[1] == 'R';
+            const Node* a = parse_expression();
+            if (!a) return nullptr;
+            const Node* b = nullptr;
+            if (binary) {
+                b = parse_expression();
+                if (!b) return nullptr;
+            }
+            return new_fold(kind, op, a, b);
         }
         if (c == 's' && peek2() == 't') return parse_expr_op("st", 1, /*type0=*/true);
         if (c == 's' && peek2() == 'z') return parse_expr_op("sz", 1, false);

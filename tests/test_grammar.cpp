@@ -59,6 +59,13 @@ const std::pair<const char*, const char*> kCases[] = {
      "castarg<double>(Tag<(int)(sizeof (double))> *)"},
     {"_Z9countpackIJicEEvP3TagIXsZT_EE",
      "countpack<int, char>(Tag<sizeof...(int, char)> *)"},
+    // fold expressions, construction vtables, VTT, virtual thunks, vectors
+    {"_Z1fIJiiEEvDTflplfp_E", "f<int, int>(decltype ((...+{parm#1})))"},
+    {"_Z1hIJiiEEvDTfLplLi1Efp_E", "h<int, int>(decltype ((1+...+{parm#1})))"},
+    {"_ZTC4Leaf0_3Mid", "construction vtable for Mid-in-Leaf"},
+    {"_ZTT4Leaf", "VTT for Leaf"},
+    {"_ZTv0_n24_N3Mid1fEv", "virtual thunk to Mid::f()"},
+    {"_Z7takevecDv4_i", "takevec(int __vector(4))"},
 };
 }  // namespace
 

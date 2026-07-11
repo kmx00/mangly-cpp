@@ -263,6 +263,31 @@ def emit_functions() -> list[str]:
         "template void castarg<double>(Tag<8>*);",
     ])
 
+    # 10) fold expressions, scope-resolution (template-param) prefixes, vector
+    #     types, and virtual inheritance (construction vtables / VTT / v-thunks).
+    lines.extend([
+        "template <class... Ts> auto uleft(Ts... ts) -> decltype((... + ts))"
+        " { return (... + ts); }",
+        "template int uleft<int, int, int>(int, int, int);",
+        "template <class... Ts> auto uright(Ts... ts) -> decltype((ts + ...))"
+        " { return (ts + ...); }",
+        "template int uright<int, int>(int, int);",
+        "template <class... Ts> auto bleft(Ts... ts) -> decltype((0 + ... + ts))"
+        " { return (0 + ... + ts); }",
+        "template int bleft<int, int>(int, int);",
+        "struct Holder { typedef int type; };",
+        "template <class T> typename T::type deref() { return {}; }",
+        "template int deref<Holder>();",
+        "typedef int v4si __attribute__((vector_size(16)));",
+        "void takevec(v4si) {}",
+        "struct VBase { virtual void f(); virtual ~VBase(); };",
+        "struct Mid : virtual VBase { void f() override; ~Mid() override; };",
+        "struct Leaf : Mid { void f() override; ~Leaf() override; };",
+        "void VBase::f() {} VBase::~VBase() {}",
+        "void Mid::f() {} Mid::~Mid() {}",
+        "void Leaf::f() {} Leaf::~Leaf() {}",
+    ])
+
     return lines
 
 
