@@ -40,6 +40,7 @@ enum class Kind : std::uint8_t {
     TemplateParam,  // T_ / T<n>_  (references a template argument)
     Expression,     // X <expression> E  (dependent template argument)
     SpecialName,    // TV/TI/TS/TT <type>, thunks (Th/Tv/Tc), guard vars
+    Decltype,       // Dt <expr> E (id) / DT <expr> E (expression)
 };
 
 struct Node {
@@ -115,6 +116,10 @@ struct Node {
             StringView extra;  // thunk offset spec (verbatim); empty otherwise
             const Node* inner; // the type (TV..) or base encoding (thunk)
         } special;
+        struct {
+            const Node* expr;
+            bool id_form;  // true == Dt (id-expression), false == DT (expression)
+        } decl_type;
     };
 };
 
@@ -481,6 +486,11 @@ inline void render(const Node* n, OutputBuffer& o) {
             render(n->special.inner, o);
             return;
         }
+        case Kind::Decltype:
+            o.append("decltype (");
+            render(n->decl_type.expr, o);
+            o.push(')');
+            return;
     }
 }
 
@@ -668,6 +678,9 @@ inline bool structurally_equal(const Node* a, const Node* b) {
             return sv_equal(a->special.code, b->special.code) &&
                    sv_equal(a->special.extra, b->special.extra) &&
                    structurally_equal(a->special.inner, b->special.inner);
+        case Kind::Decltype:
+            return a->decl_type.id_form == b->decl_type.id_form &&
+                   structurally_equal(a->decl_type.expr, b->decl_type.expr);
     }
     return false;
 }
