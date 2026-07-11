@@ -18,7 +18,7 @@
       (not `N...E`); non-canonical `N...E` normalizes on remangle
 - [x] generated ground-truth corpus: `tools/gen_corpus.py` compiles weird-but-
       legal signatures with a real Itanium compiler and extracts `nm` symbols to
-      `tests/corpus.txt`; every symbol parses + re-mangles byte-exact (420 syms)
+      `tests/corpus.txt`; every symbol parses + re-mangles byte-exact (425 syms)
 - [x] broadened grammar (all validated byte-exact via the corpus):
   - [x] operator names (full table incl. `cv` conversion, `li` literal)
   - [x] constructor/destructor names (`C1/C2`, `D1/D2`)
@@ -50,6 +50,8 @@
         E`, address-of `ad`), **named casts** (`sc`/`dc`/`cc`/`rc`), **scope
         resolution** (`sr`), **`new`** (`nw`/`na`), **pack-expansion-in-
         expression** (`sp`), and the **nullptr literal** (`LDnE`)
+  - [x] **`delete`** (`dl`/`da`) expressions and the **global-scope prefix**
+        (`gs` -> `::new`/`::delete`)
 - [x] `mangly` CLI (args/stdin; `-r/--remangle`), cstdlib I/O
 - [x] pure-C++ test harness (no framework dep); builds+passes on MSVC and g++
 
@@ -60,16 +62,18 @@
   function/member-pointer types, operators, ctor/dtor, template parameters,
   special names (vtable/VTT/typeinfo/construction-vtable/thunks), decltype, local
   names/lambdas/guard variables, fold expressions, abi-tags, and substitutions.
-- NOT yet (all rare): `delete` (`dl`/`da`) and `typeid` (`ti`/`te`) expressions,
-  placement-`new` initializers, and unusual vendor extensions.
+- NOT yet: `typeid`/`noexcept` expressions -- but g++ itself refuses to mangle
+  these ("sorry, unimplemented: mangling typeid_expr/noexcept_expr"), so they do
+  not occur in real g++ output; placement-`new` initializers; and unusual vendor
+  extensions.
 - Pattern pack-expansion (e.g. `Dp P T_`) and `sizeof...` render approximately
   (byte-exact remangle is unaffected).
 - Template return type parsed but not rendered; array element spacing is
   presentation-only (`Elem[]` for a substitution element, `Elem []` otherwise).
 
 ## next
-- v0.0.2: broaden CLI (batch/CSV modes), harden fuzz coverage, and add the last
-  rare `<expression>` leaves (`delete`, `typeid`) as grounded samples appear. The
-  demangler already covers what g++/clang emit for real-world code.
+- v0.0.2: broaden CLI (batch/CSV modes) and harden fuzz coverage. The demangler
+  now covers essentially every `<encoding>` g++/clang emit for real code; the
+  only unhandled expression leaves are ones g++ cannot mangle either.
 - keep growing `tools/gen_corpus.py` (it gates each construct behind a real-
   compiler byte-exact check).

@@ -74,6 +74,12 @@ const std::pair<const char*, const char*> kCases[] = {
     {"_Z1gIiEvP3TagIXsrT_5valueEE", "g<int>(Tag<int::value> *)"},
     {"_Z1hIiEvP3TagIXsciLi0EEE", "h<int>(Tag<static_cast<int>(0)> *)"},
     {"_Z1kIJiiEEvP3TagIXspfp_EE", "k<int, int>(Tag<{parm#1}...> *)"},
+    // delete expressions and the global-scope (::) prefix on new/delete
+    {"_Z3delIiEDTdlfp_EPT_", "del<int>(int *)"},
+    {"_Z1pIiEvP3TagIXdlfp_EE", "p<int>(Tag<delete {parm#1}> *)"},
+    {"_Z1qIiEvP3TagIXdafp_EE", "q<int>(Tag<delete[] {parm#1}> *)"},
+    {"_Z1rIiEvP3TagIXgsnw_T_EEE", "r<int>(Tag<::new int> *)"},
+    {"_Z1sIiEvP3TagIXgsdlfp_EE", "s<int>(Tag<::delete {parm#1}> *)"},
 };
 }  // namespace
 

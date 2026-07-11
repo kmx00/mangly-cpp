@@ -14,6 +14,7 @@ _Z2f6PVKi
 _Z2f7RA4_i
 _Z2f8c
 _Z2f9Pc
+_Z3delIiEDTdlfp_EPT_
 _Z3f10PPc
 _Z3f11PKc
 _Z3f12RKc
@@ -294,6 +295,8 @@ _Z4ft_gIiEvP3TagIXstT_EE
 _Z4ft_hIdEvP3TagIXplstT_Li1EEE
 _Z4ft_jIiEvT_DTpltlS0_EtlS0_EE
 _Z4ftt13BoxIFviEES_IFicdEE
+_Z4gdelIiEDTgsdlfp_EPT_
+_Z4gnewIiEDTgsnw_T_EEv
 _Z4ntt18FixedArrILi7EE6ToggleILb0EE3TagILm1000EE
 _Z4ntt23BoxI8FixedArrILi3EEE6ToggleILb1EE
 _Z4ntt36SignedILin5EES_ILi7EE
@@ -307,12 +310,14 @@ _Z5mixedIiJcdEEvT_DpPT0_
 _Z5scastI2CvEDTsclfp_ET_
 _Z5tallyi
 _Z5uleftIJiiiEEDTflplfp_EDpT_
+_Z6delarrIiEDTdafp_EPT_
 _Z6invokeIZ10use_lambdavEUliE_EDTclfp_Li0EEET_
 _Z6memaccI8HasFieldEDtdtfp_5fieldET_
 _Z6urightIJiiEEDTfrplfp_EDpT_
 _Z7call_itIXadL_Z6targetvEEEvv
 _Z7castargIdEvP3TagIXcvistT_EE
 _Z7counterv
+_Z7gdelarrIiEDTgsdafp_EPT_
 _Z7newexprIiEDTnw_T_EEv
 _Z7takevecDv4_i
 _Z8packcallIJiiEEDTcl6calleespfp_EEDpT_

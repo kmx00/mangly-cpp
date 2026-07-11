@@ -118,9 +118,10 @@ unchanged.
   template parameters, special names (vtable/VTT/typeinfo/construction-vtable/
   thunks), `decltype`, local names, guard variables, lambda/unnamed closures,
   function-parameter and fold expressions, variadic packs (`sizeof...`), abi-tags,
-  member-access/cast/named-cast/`new`/scope-resolution expressions, pointer and
-  function-pointer non-type template arguments, and substitutions. Not yet
-  handled: a few rare `<expression>` leaves (`delete`, `typeid`) and unusual
+  member-access/cast/named-cast/`new`/`delete`/scope-resolution expressions, the
+  global-scope (`::`) prefix, pointer and function-pointer non-type template
+  arguments, and substitutions. Not handled: `typeid`/`noexcept` expressions
+  (which g++ itself cannot mangle, so they never occur in its output) and unusual
   vendor extensions.
 - The template return type is parsed but intentionally not rendered (matches the
   source tool: template functions drop the leading return type).

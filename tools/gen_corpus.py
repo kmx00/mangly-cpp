@@ -317,6 +317,23 @@ def emit_functions() -> list[str]:
         "void use_null(Null<nullptr>) {}",
     ])
 
+    # 12) delete expressions (dl/da) and the global-scope prefix (gs) on
+    # new/delete, all in dependent (decltype) contexts.
+    lines.extend([
+        "template <class T> auto del(T* p) -> decltype(delete p) { delete p; }",
+        "template void del<int>(int*);",
+        "template <class T> auto delarr(T* p) -> decltype(delete[] p)"
+        " { delete[] p; }",
+        "template void delarr<int>(int*);",
+        "template <class T> auto gnew() -> decltype(::new T) { return ::new T; }",
+        "template int* gnew<int>();",
+        "template <class T> auto gdel(T* p) -> decltype(::delete p) { ::delete p; }",
+        "template void gdel<int>(int*);",
+        "template <class T> auto gdelarr(T* p) -> decltype(::delete[] p)"
+        " { ::delete[] p; }",
+        "template void gdelarr<int>(int*);",
+    ])
+
     return lines
 
 

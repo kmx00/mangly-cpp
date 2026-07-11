@@ -1043,6 +1043,16 @@ private:
             arr[1] = mem;
             return new_expr(op, arr, 2);
         }
+        if (c == 'g' && peek2() == 's') {  // global scope: ::new / ::delete / ::name
+            StringView op{s_ + i_, 2};
+            i_ += 2;
+            const Node* inner = parse_expression();
+            if (!inner) return nullptr;
+            const Node** arr = arena_.alloc<const Node*>(1);
+            if (!arr) return fail("out of memory");
+            arr[0] = inner;
+            return new_expr(op, arr, 1);
+        }
         // operators (arithmetic/logical/comparison/...): fixed arity.
         int arity = expr_operator_arity(c, peek2());
         if (arity > 0) {
