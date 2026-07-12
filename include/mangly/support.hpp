@@ -27,7 +27,9 @@ inline StringView make_sv(const char* z) {
 }
 
 inline bool sv_equal(StringView a, StringView b) {
-    return a.size == b.size && std::memcmp(a.data, b.data, a.size) == 0;
+    if (a.size != b.size) return false;
+    if (a.size == 0) return true;  // memcmp(NULL, NULL, 0) is UB; empty views alias null
+    return std::memcmp(a.data, b.data, a.size) == 0;
 }
 
 // Bump allocator: a singly linked list of malloc'd blocks. Objects are never
@@ -118,6 +120,7 @@ public:
     }
 
     void append(const char* s, std::size_t n) {
+        if (n == 0) return;  // memcpy(dst, NULL, 0) is UB; empty views pass s=nullptr
         if (!reserve(n)) return;
         std::memcpy(data_ + size_, s, n);
         size_ += n;

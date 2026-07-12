@@ -40,6 +40,30 @@ std::string source_name(const std::string& id) {
 
 }  // namespace
 
+// Regression: a local name with NO discriminator (e.g. a variable declared once
+// in a function body) parses with an empty StringView discriminator whose data
+// pointer is null. The mangler appends that discriminator verbatim, so it must
+// not hand memcpy a null source -- which is UB (C 7.24.1/2) even for length 0
+// and is caught by UBSan (glibc annotates memcpy nonnull; CI's clang asan+ubsan
+// job flags it). Output is byte-exact either way, so only a sanitizer sees the
+// defect: this pins the exact triggering symbol as a named case.
+TEST(local_name_without_discriminator_round_trips) {
+    const char* const cases[] = {
+        "_ZZ5tallyiE1a",    // int a; in tally(int)
+        "_ZZ7countervE1n",  // n in counter()
+    };
+    for (const char* m : cases) {
+        bool ok = false;
+        std::string human = do_demangle(m, ok);
+        CHECK(ok);
+        CHECK(!human.empty());
+        bool rok = false;
+        std::string re = do_remangle(m, rok);
+        CHECK(rok);
+        CHECK_EQ(re, std::string(m));
+    }
+}
+
 // The library's headline optimization is a reused Demangler that rewinds its
 // arena and output buffer instead of reallocating. A single reused instance
 // must produce byte-identical results to a per-symbol fresh instance -- and
