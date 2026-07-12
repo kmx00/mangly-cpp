@@ -51,6 +51,8 @@ enum class Kind : std::uint8_t {
     Vendor,         // u <source-name>  (vendor-extended type)
     Fold,           // fl/fr/fL/fR  (fold expression)
     MangledName,    // L <mangled-name> E  (external-name / pointer literal)
+    Complex,        // C <type>  (_Complex)
+    Imaginary,      // G <type>  (_Imaginary)
 };
 
 struct Node {
@@ -545,6 +547,11 @@ inline void render(const Node* n, OutputBuffer& o) {
                 o.append(n->literal.value.data + 1, n->literal.value.size - 1);
             } else if (!n->literal.value.size && t) {
                 render(t, o);  // valueless literal (e.g. LDnE): show the type
+            } else if (t && t->kind != Kind::Builtin) {
+                o.push('(');  // enum/class NTTP: (Type)value, matching c++filt
+                render(t, o);
+                o.push(')');
+                o.append(n->literal.value);
             } else {
                 o.append(n->literal.value);
             }
@@ -680,6 +687,14 @@ inline void render(const Node* n, OutputBuffer& o) {
             return;
         case Kind::Vendor:
             o.append(n->vendor.name);
+            return;
+        case Kind::Complex:
+            render(n->ref.inner, o);
+            o.append(" _Complex");
+            return;
+        case Kind::Imaginary:
+            render(n->ref.inner, o);
+            o.append(" _Imaginary");
             return;
         case Kind::Fold: {
             const char* sym = operator_symbol(n->fold.op);
@@ -895,6 +910,8 @@ inline bool structurally_equal(const Node* a, const Node* b) {
         case Kind::Pointer:
         case Kind::LValueRef:
         case Kind::RValueRef:
+        case Kind::Complex:
+        case Kind::Imaginary:
             return structurally_equal(a->ref.inner, b->ref.inner);
         case Kind::Array:
             if (a->array.has_dim != b->array.has_dim) return false;

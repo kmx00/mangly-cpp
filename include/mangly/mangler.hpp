@@ -368,6 +368,16 @@ private:
                 mangle_type(node->ref.inner);
                 add_sub(node);
                 return;
+            case Kind::Complex:
+                out_.push('C');
+                mangle_type(node->ref.inner);
+                add_sub(node);
+                return;
+            case Kind::Imaginary:
+                out_.push('G');
+                mangle_type(node->ref.inner);
+                add_sub(node);
+                return;
             case Kind::LValueRef:
                 out_.push('R');
                 mangle_type(node->ref.inner);

@@ -94,6 +94,14 @@ const std::pair<const char*, const char*> kCases[] = {
     {"_Z5b_allwDsDiahtxye",
      "b_all(wchar_t,char16_t,char32_t,signed char,unsigned char,unsigned short,"
      "long long,unsigned long long,long double)"},
+    // review phase 2: _Complex/_Imaginary, enum NTTP cast, template-template,
+    // anonymous namespace, dependent member type, substitution back-refs
+    {"_Z4cplxCfCdCe",
+     "cplx(float _Complex,double _Complex,long double _Complex)"},
+    {"_Z3ent8EnumNTTPIL5Color0EE", "ent(EnumNTTP<(Color)0>)"},
+    {"_Z6tt_use8TTHolderI3BoxE", "tt_use(TTHolder<Box>)"},
+    {"_Z8anon_usePN12_GLOBAL__N_16HiddenE", "anon_use(_GLOBAL__N_1::Hidden *)"},
+    {"_Z2wrIiEvN4WrapIT_E5InnerE", "wr<int>(Wrap<int>::Inner)"},
 };
 }  // namespace
 

@@ -434,6 +434,51 @@ def emit_functions() -> list[str]:
         "void s_tuple(std::tuple<int, char, double>) {}",
     ])
 
+    # 15) REVIEW PHASE 2 diversification: enums (plain + scoped + fixed base),
+    # unions, anonymous-namespace types, template-template parameters, _Complex
+    # types, non-type template params (enum / pointer / reference), references to
+    # functions and arrays of function pointers, and substitution back-ref stress.
+    lines.extend([
+        # -- enums (plain, scoped, fixed underlying type) --
+        "enum Color { Red, Green };",
+        "enum class Dir { North, South };",
+        "enum Sized : unsigned char { Lo, Hi };",
+        "void e_plain(Color) {}",
+        "void e_scoped(Dir) {}",
+        "void e_sized(Sized) {}",
+        # -- union --
+        "union U { int i; float f; };",
+        "void u_fn(U*, const U&) {}",
+        # -- anonymous namespace type (internal-linkage name) --
+        "namespace { struct Hidden {}; }",
+        "void anon_use(Hidden*) {}",
+        # -- template-template parameter --
+        "template <template <class> class TT> struct TTHolder {};",
+        "void tt_use(TTHolder<Box>) {}",
+        # -- _Complex builtin types (Cf/Cd/Ce) --
+        "void cplx(float _Complex, double _Complex, long double _Complex) {}",
+        # -- non-type template params: enum value, object pointer, reference --
+        "template <Color C> struct EnumNTTP {};",
+        "void ent(EnumNTTP<Red>) {}",
+        "int g_int;",
+        "template <int& R> struct RefNTTP {};",
+        "void rnt(RefNTTP<g_int>) {}",
+        "template <int* P> struct PtrNTTP {};",
+        "void pnt(PtrNTTP<&g_int>) {}",
+        # -- reference to function, array of function pointers --
+        "void fref(void (&)(int)) {}",
+        "void afp(void (*(*)[4])(int)) {}",
+        # -- substitution back-reference stress (repeated composite types) --
+        "void subs_stress(Box<ns1::Inner>, Box<ns1::Inner>*,"
+        " Pair<Box<ns1::Inner>, Box<ns1::Inner> >) {}",
+        # -- pointer to member of a template class --
+        "void mp_tmpl(int Box<int>::*) {}",
+        # -- nested template with a dependent member type in a signature --
+        "template <class T> struct Wrap { struct Inner {}; };",
+        "template <class T> void wr(typename Wrap<T>::Inner) {}",
+        "template void wr<int>(Wrap<int>::Inner);",
+    ])
+
     return lines
 
 
