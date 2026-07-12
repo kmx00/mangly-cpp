@@ -140,8 +140,17 @@ public:
     void append(const char* s, std::size_t n) {
         if (n == 0) return;  // memcpy(dst, NULL, 0) is UB; empty views pass s=nullptr
         if (!reserve(n)) return;
-        std::memcpy(data_ + size_, s, n);
+        char* d = data_ + size_;
         size_ += n;
+        // Most appends are tiny (2-char literals like "::", short source names),
+        // where a CRT memcpy/memmove call costs more than the copy. Inline a byte
+        // loop for the short case (the compiler unrolls/vectorizes it at -O2) and
+        // reserve the library call for genuinely long spans.
+        if (n <= 16) {
+            for (std::size_t k = 0; k < n; ++k) d[k] = s[k];
+        } else {
+            std::memcpy(d, s, n);
+        }
     }
 
     void append(const char* z) { append(z, std::strlen(z)); }
