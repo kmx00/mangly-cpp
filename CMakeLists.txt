@@ -26,6 +26,30 @@ else()
   add_compile_options(-fno-rtti -Wall -Wextra)
 endif()
 
+# Optional sanitizers. -DMANGLY_SANITIZE=address|undefined|all turns the whole
+# build (tests included) into a memory/UB safety sweep -- the safety net for the
+# hand-rolled Arena/OutputBuffer/Vec and the recursive parser before/after perf
+# work. MSVC supports AddressSanitizer only; GCC/Clang support both.
+set(MANGLY_SANITIZE "" CACHE STRING "Sanitizers: address|undefined|all (empty=off)")
+if(MANGLY_SANITIZE)
+  if(MSVC)
+    if(MANGLY_SANITIZE MATCHES "undefined")
+      message(FATAL_ERROR "MSVC has no UndefinedBehaviorSanitizer; use address")
+    endif()
+    add_compile_options(/fsanitize=address /Zi)
+    add_link_options(/DEBUG)  # silence LNK4302; better ASan symbolization
+  else()
+    set(_mangly_san "")
+    if(MANGLY_SANITIZE STREQUAL "all")
+      set(_mangly_san "address,undefined")
+    else()
+      set(_mangly_san "${MANGLY_SANITIZE}")
+    endif()
+    add_compile_options(-fsanitize=${_mangly_san} -fno-omit-frame-pointer -g)
+    add_link_options(-fsanitize=${_mangly_san})
+  endif()
+endif()
+
 # CLI: the only shipped binary. It is compiled with exceptions DISABLED, which
 # proves the header (parser/mangler/cli) is exception-free and stays lean.
 add_executable(mangly_cli src/main.cpp)

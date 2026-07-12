@@ -5,6 +5,8 @@ add_executable(mangly_tests
   test_cli.cpp
   test_corpus.cpp
   test_grammar.cpp
+  test_stress.cpp
+  test_robustness.cpp
 )
 target_link_libraries(mangly_tests PRIVATE mangly)
 target_include_directories(mangly_tests PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})

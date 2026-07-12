@@ -25,6 +25,23 @@ jobs:
       - name: Test
         run: ctest --test-dir build -C Release --output-on-failure
 
+  sanitize:
+    name: sanitize (clang asan+ubsan)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Configure
+        run: cmake -S . -B build -DCMAKE_BUILD_TYPE=RelWithDebInfo -DCMAKE_CXX_COMPILER=clang++ -DMANGLY_SANITIZE=all
+      - name: Build
+        run: cmake --build build
+      - name: Test
+        env:
+          # Fail on any leak/UB; keep the stress case short so CI stays fast.
+          ASAN_OPTIONS: detect_leaks=1:abort_on_error=1
+          UBSAN_OPTIONS: halt_on_error=1:print_stacktrace=1
+          MANGLY_STRESS_PASSES: "200"
+        run: ctest --test-dir build --output-on-failure
+
   package:
     name: package cli
     needs: test
