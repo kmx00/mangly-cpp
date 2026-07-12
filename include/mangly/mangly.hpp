@@ -44,10 +44,13 @@ inline bool demangle(const char* mangled, OutputBuffer& out) {
 // until the next call on the same instance.
 class Demangler {
 public:
+    Demangler() : parser_(arena_), mangler_(out_) {}
+
     const char* demangle(const char* mangled, std::uint32_t len) {
         arena_.reset();
         out_.clear();
-        const Node* node = parse(mangled, len, arena_);
+        parser_.reset_input(mangled, len);
+        const Node* node = parser_.parse();
         if (!node) return nullptr;
         render(node, out_);
         return out_.failed() ? nullptr : out_.c_str();
@@ -59,17 +62,22 @@ public:
     const char* remangle(const char* mangled, std::uint32_t len) {
         arena_.reset();
         out_.clear();
-        const Node* node = parse(mangled, len, arena_);
+        parser_.reset_input(mangled, len);
+        const Node* node = parser_.parse();
         if (!node) return nullptr;
-        return mangle(node, out_) ? out_.c_str() : nullptr;
+        return mangler_.mangle(node) ? out_.c_str() : nullptr;
     }
     const char* remangle(const char* mangled) {
         return remangle(mangled, static_cast<std::uint32_t>(std::strlen(mangled)));
     }
 
 private:
+    // Declaration order matters: arena_/out_ must outlive the parser_/mangler_
+    // that hold references to them.
     Arena arena_;
     OutputBuffer out_;
+    Parser parser_;
+    Mangler mangler_;
 };
 
 }  // namespace mangly

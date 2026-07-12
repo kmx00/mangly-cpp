@@ -208,7 +208,10 @@ public:
     std::uint32_t size() const { return size_; }
     T operator[](std::uint32_t i) const { return data_[i]; }
     const T* data() const { return data_; }
-    void clear() { size_ = 0; }
+    // Shrink to `n` (must be <= size); keeps capacity for reuse. Pops a scratch
+    // frame once its contents have been copied out.
+    void truncate(std::uint32_t n) { size_ = n; }
+    void clear() { size_ = 0; failed_ = false; }
     bool failed() const { return failed_; }
 
 private:

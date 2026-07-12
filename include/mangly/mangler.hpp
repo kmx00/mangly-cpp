@@ -21,6 +21,12 @@ public:
 
     // Returns true on success; false if the AST is unmanglable or on OOM.
     bool mangle(const Node* node) {
+        // Reset per-call state so one Mangler can be reused across many names
+        // (a Demangler holds one): rewind the substitution table and the scratch
+        // arena, keeping their capacity. out_ is owned/cleared by the caller.
+        seen_.clear();
+        scratch_.reset();
+        failed_ = false;
         out_.append("_Z");
         mangle_body(node);
         return !failed_ && !out_.failed();
