@@ -34,7 +34,7 @@ target_link_libraries(your_target PRIVATE mangly::mangly)
 CPM:
 
 ```cmake
-CPMAddPackage("gh:kmx00/mangly-cpp@0.0.1")
+CPMAddPackage("gh:kmx00/mangly-cpp#v0.0.1")
 target_link_libraries(your_target PRIVATE mangly::mangly)
 ```
 

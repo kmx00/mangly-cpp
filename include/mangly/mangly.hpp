@@ -14,6 +14,7 @@
 #define MANGLY_MANGLY_HPP
 
 #include <cstdint>
+#include <cstring>  // std::strlen in the const char* overloads
 
 #include "mangly/mangler.hpp"
 #include "mangly/nodes.hpp"

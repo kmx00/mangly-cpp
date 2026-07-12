@@ -22,7 +22,6 @@ struct StringView {
     std::uint32_t size = 0;
 };
 
-inline StringView make_sv(const char* s, std::uint32_t n) { return StringView{s, n}; }
 inline StringView make_sv(const char* z) {
     return StringView{z, static_cast<std::uint32_t>(std::strlen(z))};
 }

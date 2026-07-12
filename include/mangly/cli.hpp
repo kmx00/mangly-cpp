@@ -18,10 +18,10 @@ namespace mangly {
 
 namespace cli_detail {
 
-inline const char* kUsage = "usage: mangly [-h] [-r] [names ...]\n";
+inline const char* kUsage = "usage: mangly [-h] [-V] [-r] [names ...]\n";
 
 inline const char* kHelp =
-    "usage: mangly [-h] [-r] [names ...]\n"
+    "usage: mangly [-h] [-V] [-r] [names ...]\n"
     "\n"
     "De/remangle Itanium C++ ABI mangled names.\n"
     "\n"
@@ -30,6 +30,7 @@ inline const char* kHelp =
     "\n"
     "options:\n"
     "  -h, --help      show this help message and exit\n"
+    "  -V, --version   show the version and exit\n"
     "  -r, --remangle  print the canonical re-mangling instead of the "
     "demangled form\n";
 
@@ -48,6 +49,7 @@ inline bool is_blank(const char* s) {
 struct ParsedArgs {
     bool remangle = false;
     bool help = false;
+    bool version = false;
     bool error = false;
     const char* error_arg = nullptr;
     Vec<const char*> names;  // point into argv (must outlive use)
@@ -61,6 +63,8 @@ inline void parse_args(int argc, const char* const* argv, ParsedArgs& out) {
             out.remangle = true;
         } else if (std::strcmp(a, "-h") == 0 || std::strcmp(a, "--help") == 0) {
             out.help = true;
+        } else if (std::strcmp(a, "-V") == 0 || std::strcmp(a, "--version") == 0) {
+            out.version = true;
         } else if (a[0] == '-' && a[1] != '\0') {
             out.error = true;
             out.error_arg = a;  // argparse aborts on the first unknown option
@@ -96,6 +100,12 @@ inline int cli_run(int argc, const char* const* argv,
     }
     if (pa.help) {
         out.append(cli_detail::kHelp);
+        return 0;
+    }
+    if (pa.version) {
+        out.append("mangly ");
+        out.append(version);
+        out.push('\n');
         return 0;
     }
 

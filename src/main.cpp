@@ -21,7 +21,7 @@ int main(int argc, char** argv) {
     mangly::ParsedArgs pre;
     mangly::parse_args(argc, argv, pre);
     const bool need_stdin =
-        !pre.error && !pre.help && pre.names.size() == 0 && !tty;
+        !pre.error && !pre.help && !pre.version && pre.names.size() == 0 && !tty;
 
     mangly::OutputBuffer input;   // owns the stdin bytes for the tokenized lines
     mangly::Vec<const char*> lines;
