@@ -99,12 +99,13 @@ private:
         return false;
     }
 
-    void add_sub(const Node* node) {
-        for (std::uint32_t i = 0; i < seen_.size(); ++i) {
-            if (structurally_equal(seen_[i], node)) return;  // dedup
-        }
-        seen_.push(node);
-    }
+    // Register `node` as a substitution. PRECONDITION: the caller has already
+    // run try_sub(node) and it returned false -- every callsite does. Between
+    // that check and here, only *children* of `node` are ever add_sub'd, and a
+    // child is a strict sub-structure (never structurally_equal to its parent),
+    // so `node` is guaranteed absent. No dedup scan needed: just append. (The
+    // byte-exact corpus/roundtrip tests are the guard if that invariant breaks.)
+    void add_sub(const Node* node) { seen_.push(node); }
 
     // ------------------------------------------------------------------ entry
     void mangle_function(const Node* fn) {
