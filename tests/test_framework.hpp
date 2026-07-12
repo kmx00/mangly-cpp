@@ -6,6 +6,7 @@
 #ifndef MANGLY_TEST_FRAMEWORK_HPP
 #define MANGLY_TEST_FRAMEWORK_HPP
 
+#include <chrono>
 #include <cstdio>
 #include <exception>
 #include <functional>
@@ -68,20 +69,30 @@ inline int run_all() {
     int passed = 0;
     int failed = 0;
     for (auto& t : registry()) {
+        using clock = std::chrono::steady_clock;
+        const auto start = clock::now();
+        bool ok = false;
+        std::string detail;
         try {
             t.fn();
-            ++passed;
+            ok = true;
         } catch (const Failure& f) {
-            ++failed;
-            std::printf("[FAIL] %s\n       %s\n", t.name.c_str(), f.msg.c_str());
+            detail = f.msg;
         } catch (const std::exception& e) {
-            ++failed;
-            std::printf("[FAIL] %s\n       unexpected exception: %s\n",
-                        t.name.c_str(), e.what());
+            detail = std::string("unexpected exception: ") + e.what();
         } catch (...) {
+            detail = "unexpected unknown exception";
+        }
+        const double ms =
+            std::chrono::duration<double, std::milli>(clock::now() - start)
+                .count();
+        if (ok) {
+            ++passed;
+            std::printf("[PASS] %s (%.3f ms)\n", t.name.c_str(), ms);
+        } else {
             ++failed;
-            std::printf("[FAIL] %s\n       unexpected unknown exception\n",
-                        t.name.c_str());
+            std::printf("[FAIL] %s (%.3f ms)\n       %s\n", t.name.c_str(), ms,
+                        detail.c_str());
         }
     }
     std::printf("\n%d passed, %d failed, %d total\n", passed, failed,
