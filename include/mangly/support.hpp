@@ -127,6 +127,11 @@ public:
     }
 
     void append(const char* z) { append(z, std::strlen(z)); }
+    // String-literal fast path: the length is the array size minus the NUL, so
+    // this binds `append("lit")` at compile time and skips the runtime strlen.
+    // A runtime `const char*` still selects the overload above.
+    template <std::size_t N>
+    void append(const char (&lit)[N]) { append(lit, N - 1); }
     void append(StringView sv) { append(sv.data, sv.size); }
 
     void append_uint(std::uint64_t v) {

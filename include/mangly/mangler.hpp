@@ -193,15 +193,23 @@ private:
     static StringView std_code(const Node* p) {
         if (!p || p->kind != Kind::SourceName) return StringView{};
         const StringView t = p->source.text;
-        static const struct { const char* full; const char* code; } tbl[] = {
-            {"std", "St"},          {"std::allocator", "Sa"},
-            {"std::basic_string", "Sb"}, {"std::string", "Ss"},
-            {"std::istream", "Si"}, {"std::ostream", "So"},
-            {"std::iostream", "Sd"},
+        // Every abbreviation spells out as "std..."; a name not starting with
+        // 's' (the common case) can never match, so skip the table entirely.
+        if (t.size == 0 || t.data[0] != 's') return StringView{};
+        // Lengths are baked in at compile time (sizeof(lit)-1), so the hot path
+        // is a size compare + memcmp -- no per-call strlen over the table.
+        struct Entry { const char* full; std::uint32_t len; const char* code; };
+        static const Entry tbl[] = {
+            {"std", sizeof("std") - 1, "St"},
+            {"std::allocator", sizeof("std::allocator") - 1, "Sa"},
+            {"std::basic_string", sizeof("std::basic_string") - 1, "Sb"},
+            {"std::string", sizeof("std::string") - 1, "Ss"},
+            {"std::istream", sizeof("std::istream") - 1, "Si"},
+            {"std::ostream", sizeof("std::ostream") - 1, "So"},
+            {"std::iostream", sizeof("std::iostream") - 1, "Sd"},
         };
         for (const auto& e : tbl) {
-            std::uint32_t len = static_cast<std::uint32_t>(std::strlen(e.full));
-            if (t.size == len && std::memcmp(t.data, e.full, len) == 0) {
+            if (t.size == e.len && std::memcmp(t.data, e.full, e.len) == 0) {
                 return StringView{e.code, 2};
             }
         }
