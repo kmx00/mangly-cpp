@@ -885,6 +885,18 @@ private:
             if (!inner) return nullptr;
             return add_sub(new_ref(Kind::RValueRef, inner));
         }
+        if (c == 'C') {  // C <type>  ->  <type> _Complex
+            take();
+            const Node* inner = parse_type();
+            if (!inner) return nullptr;
+            return add_sub(new_ref(Kind::Complex, inner));
+        }
+        if (c == 'G') {  // G <type>  ->  <type> _Imaginary
+            take();
+            const Node* inner = parse_type();
+            if (!inner) return nullptr;
+            return add_sub(new_ref(Kind::Imaginary, inner));
+        }
         if (c == 'A') return parse_array();
         if (c == 'T') return parse_template_param();
         if (c == 'F') return parse_function_type();

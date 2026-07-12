@@ -18,7 +18,7 @@
       (not `N...E`); non-canonical `N...E` normalizes on remangle
 - [x] generated ground-truth corpus: `tools/gen_corpus.py` compiles weird-but-
       legal signatures with a real Itanium compiler and extracts `nm` symbols to
-      `tests/corpus.txt`; every symbol parses + re-mangles byte-exact (489 syms)
+      `tests/corpus.txt`; every symbol parses + re-mangles byte-exact (504 syms)
 - [x] broadened grammar (all validated byte-exact via the corpus):
   - [x] operator names (full table incl. `cv` conversion, `li` literal)
   - [x] constructor/destructor names (`C1/C2`, `D1/D2`)
@@ -103,3 +103,28 @@ diversification pass against g++-generated ground truth.
   `long (MC::*)(char) const`) and pointer to a multi-dimensional array
   (`int [] (*)[3]` -> `int (*)[3][4]`). Now pinned in `tests/test_grammar.cpp`.
 - green on g++ and MSVC (24 tests, zero warnings).
+
+## review phase 2 (done)
+Second diversification pass targeting exotic type/name forms.
+- corpus 489 -> 504: enums (plain / scoped / fixed-underlying), unions,
+  anonymous-namespace types (`_GLOBAL__N_1`), template-template parameters,
+  non-type template params by enum value / object pointer / reference, function
+  references, pointer-to-member of a template class, dependent member types
+  (`Wrap<T>::Inner`), and substitution back-reference stress.
+- feature implemented: **`_Complex` / `_Imaginary` types** (`C <type>` /
+  `G <type>`) -- new `Kind::Complex`/`Kind::Imaginary`; the only PARSEFAIL the
+  pass surfaced. Rendered `float _Complex` / `float _Imaginary`.
+- render fix: enum / class non-type template arguments now render `(Color)0`
+  (matching c++filt) instead of a bare `0`.
+- known limitation (documented, not a regression): deeply *composed* declarators
+  -- e.g. a pointer to an array of function pointers (`void (* (*) [4])(int)`) --
+  render approximately. The byte-exact round-trip (the hard contract) still
+  holds; only the human rendering of arbitrarily-nested declarators is
+  approximate, same class as the pack-expansion approximation. A proper fix is a
+  recursive declarator builder (deferred; would risk the ~20 working cases).
+- green on g++ and MSVC (24 tests, zero warnings).
+
+## next review
+- If pursuing IDA-grade rendering of every construct, the one worthwhile lift is
+  the recursive C-declarator builder (fixes composed pointer/array/function
+  nesting). Otherwise the demangler is byte-exact across 504 diverse g++ symbols.

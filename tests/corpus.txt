@@ -6,6 +6,7 @@ _Z10use_objptr6ObjPtrIXadL_Z10global_objEEE
 _Z11cv_restrictPiPKc
 _Z11make_taggedB4tag1v
 _Z11nested_tmpl3BoxIS_IS_IiEEE
+_Z11subs_stress3BoxIN3ns15InnerEEPS2_4PairIS2_S2_E
 _Z2f0i
 _Z2f1Pi
 _Z2f2PPi
@@ -16,7 +17,10 @@ _Z2f6PVKi
 _Z2f7RA4_i
 _Z2f8c
 _Z2f9Pc
+_Z2wrIiEvN4WrapIT_E5InnerE
+_Z3afpPA4_PFviE
 _Z3delIiEDTdlfp_EPT_
+_Z3ent8EnumNTTPIL5Color0EE
 _Z3f10PPc
 _Z3f11PKc
 _Z3f12RKc
@@ -113,7 +117,10 @@ _Z3fp3PFiiiES0_
 _Z3fr1RFliE
 _Z3fwdIRiEvOT_
 _Z3fwdIiEvOT_
+_Z3pnt7PtrNTTPIXadL_Z5g_intEEE
+_Z3rnt7RefNTTPIL_Z5g_intEE
 _Z3srvI8HasValueEDtsrT_5valueEv
+_Z4cplxCfCdCe
 _Z4f100RKe
 _Z4f101Oe
 _Z4f102PVKe
@@ -289,6 +296,7 @@ _Z4f2718TopClass3BoxIiEPiRKS_
 _Z4f272N3ns15InnerE3BoxI8TopClassEPcRKS0_
 _Z4f273N3ns13ns24DeepE3BoxIS1_EPbRKS1_
 _Z4f274N3ns13ns23ns36DeeperE4PairIicEPdRKS2_
+_Z4frefRFviE
 _Z4ft_aIiEvT_S0_
 _Z4ft_bIdEvPT_RKS0_OS0_
 _Z4ft_cIicEvT0_T_S0_PS1_
@@ -308,6 +316,7 @@ _Z4pmd1MN3ops3NumEi
 _Z4pmd2MN3ops3NumElS1_
 _Z4pmf1MN3ops3NumEFvvE
 _Z4pmf2MN3ops3NumEFlicE
+_Z4u_fnP1URKS_
 _Z5b_allwDsDiahtxye
 _Z5b_extnog
 _Z5bleftIJiiEEDTfLplLi0Efp_EDpT_
@@ -328,6 +337,7 @@ _Z6ne_depILb1EEvPDOT_EFvvE
 _Z6ret_fpv
 _Z6s_pairSt4pairIidE
 _Z6tfn_neIiEvPDoFT_vE
+_Z6tt_use8TTHolderI3BoxE
 _Z6urightIJiiEEDTfrplfp_EDpT_
 _Z7arr_aopPA5_Pc
 _Z7arr_p2aPA3_A4_i
@@ -338,13 +348,18 @@ _Z7castargIdEvP3TagIXcvistT_EE
 _Z7counterv
 _Z7cv_ptrsPKiPViPVKi
 _Z7deep_nsN3ns13ns23ns36DeeperE
+_Z7e_plain5Color
+_Z7e_sized5Sized
 _Z7gdelarrIiEDTgsdafp_EPT_
 _Z7mp_dataM2MCi
+_Z7mp_tmplM3BoxIiEi
 _Z7ne_dep2IiEvPDOgtstT_Li0EEFvvE
 _Z7newexprIiEDTnw_T_EEv
 _Z7s_tupleSt5tupleIJicdEE
 _Z7take_nePDoFvvE
 _Z7takevecDv4_i
+_Z8anon_usePN12_GLOBAL__N_16HiddenE
+_Z8e_scoped3Dir
 _Z8make_strB5cxx11v
 _Z8packcallIJiiEEDTcl6calleespfp_EEDpT_
 _Z8s_sharedSt10shared_ptrIiE
