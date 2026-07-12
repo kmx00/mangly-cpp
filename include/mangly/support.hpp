@@ -13,6 +13,14 @@
 #include <cstdlib>
 #include <cstring>
 
+// Keep a cold slow path out of line so its hot caller stays a tiny inlinable
+// fast path (used for the arena/buffer refill paths).
+#if defined(_MSC_VER)
+#define MANGLY_NOINLINE __declspec(noinline)
+#else
+#define MANGLY_NOINLINE __attribute__((noinline))
+#endif
+
 namespace mangly {
 
 // A non-owning view of bytes (typically into the input mangled name, which must
@@ -42,22 +50,20 @@ public:
     Arena& operator=(const Arena&) = delete;
     ~Arena() { free_all(); }
 
+    // Fast path: bump within the current block. This is tiny and branch-light so
+    // it inlines into the very hot make_node/alloc<T> callers; the block-refill
+    // path is pushed out of line (see allocate_slow) to keep it that way.
     void* allocate(std::size_t bytes, std::size_t align) {
-        for (;;) {
-            if (head_) {
-                std::size_t base = reinterpret_cast<std::size_t>(head_->data());
-                std::size_t cur = base + head_->used;
-                std::size_t aligned = (cur + (align - 1)) & ~(align - 1);
-                std::size_t off = aligned - base;
-                if (off + bytes <= head_->cap) {
-                    head_->used = off + bytes;
-                    return reinterpret_cast<void*>(aligned);
-                }
-            }
-            if (!new_block(bytes + align)) {
-                return nullptr;  // OOM: caller propagates failure
+        if (head_) {
+            std::size_t base = reinterpret_cast<std::size_t>(head_->data());
+            std::size_t aligned = (base + head_->used + (align - 1)) & ~(align - 1);
+            std::size_t off = aligned - base;
+            if (off + bytes <= head_->cap) {
+                head_->used = off + bytes;
+                return reinterpret_cast<void*>(aligned);
             }
         }
+        return allocate_slow(bytes, align);
     }
 
     template <class T>
@@ -90,6 +96,18 @@ private:
         b->used = 0;
         head_ = b;
         return b;
+    }
+
+    // Cold path: current block is full (or none yet). Allocate a fresh block
+    // sized to fit, then bump from it. Kept out of line so allocate() stays a
+    // tiny inlinable fast path.
+    MANGLY_NOINLINE void* allocate_slow(std::size_t bytes, std::size_t align) {
+        if (!new_block(bytes + align)) return nullptr;  // OOM: caller propagates
+        std::size_t base = reinterpret_cast<std::size_t>(head_->data());
+        std::size_t aligned = (base + head_->used + (align - 1)) & ~(align - 1);
+        std::size_t off = aligned - base;
+        head_->used = off + bytes;
+        return reinterpret_cast<void*>(aligned);
     }
 
     void free_all() {
@@ -163,10 +181,17 @@ public:
     char* mutable_data() { return data_; }
 
 private:
+    // Fast path: capacity already covers the request (the steady state once the
+    // buffer has grown, since clear() keeps capacity). Tiny so it inlines into
+    // push/append; the realloc growth is out of line (reserve_grow).
     bool reserve(std::size_t extra) {
         if (failed_) return false;
-        std::size_t need = size_ + extra + 1;  // +1 for a possible NUL
-        if (need <= cap_) return true;
+        if (size_ + extra + 1 <= cap_) return true;  // +1 for a possible NUL
+        return reserve_grow(extra);
+    }
+
+    MANGLY_NOINLINE bool reserve_grow(std::size_t extra) {
+        std::size_t need = size_ + extra + 1;
         std::size_t nc = cap_ ? cap_ * 2 : 64;
         while (nc < need) nc *= 2;
         char* nd = static_cast<char*>(std::realloc(data_, nc));
