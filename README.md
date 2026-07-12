@@ -1,7 +1,7 @@
 # mangly-cpp
 
 Fast, header-only de/remangling of Itanium C++ ABI mangled names, plus a bundled
-`mangly` CLI. A C++17 reimagining of [mangly](../mangly).
+`mangly` CLI. A C++17 reimagining of [mangly](https://github.com/kmx00/mangly).
 
 Design constraints (see `devdocs/plans.md`):
 
