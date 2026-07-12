@@ -18,7 +18,7 @@
       (not `N...E`); non-canonical `N...E` normalizes on remangle
 - [x] generated ground-truth corpus: `tools/gen_corpus.py` compiles weird-but-
       legal signatures with a real Itanium compiler and extracts `nm` symbols to
-      `tests/corpus.txt`; every symbol parses + re-mangles byte-exact (436 syms)
+      `tests/corpus.txt`; every symbol parses + re-mangles byte-exact (489 syms)
 - [x] broadened grammar (all validated byte-exact via the corpus):
   - [x] operator names (full table incl. `cv` conversion, `li` literal)
   - [x] constructor/destructor names (`C1/C2`, `D1/D2`)
@@ -84,3 +84,22 @@
   only unhandled expression leaves are ones g++ cannot mangle either.
 - keep growing `tools/gen_corpus.py` (it gates each construct behind a real-
   compiler byte-exact check).
+
+## review phase 1 (done)
+Review-driven hardening. Applied the standing fixes and ran a strong
+diversification pass against g++-generated ground truth.
+- fixes: deleted dead 2-arg `make_sv`; `mangly.hpp` now includes `<cstring>`
+  directly; wired `mangly -V/--version` (uses the `version` constant, tested);
+  README CPM snippet points at a real ref (`#v0.0.1`).
+- corpus 436 -> 489: exhaustive builtins (`w`/`Ds`/`Di`/`n`/`o`/`g`/`e`/`a`/`h`/
+  `t`/`x`/`y`/...), the full operator table (`% ^ & | ~ ! << >> *= <<= <= && ||
+  -- ,`), cv/restrict params, pointer-to-multidim-array, array-of-pointers,
+  ref-to-array, member data/function pointers incl. cv-qualified, ref-qualified
+  (`& &&`) and cv member functions, perfect-forwarding rvalue refs, varargs
+  ellipsis (`z`), function-returning-function-pointer, deeply nested templates,
+  dependent-noexcept function types (`DO`), and `std::map/pair/shared_ptr/tuple`.
+- bugs found + fixed (both round-tripped byte-exact but rendered wrong): member
+  pointer to a cv-qualified function (`long (char) const MC::*` ->
+  `long (MC::*)(char) const`) and pointer to a multi-dimensional array
+  (`int [] (*)[3]` -> `int (*)[3][4]`). Now pinned in `tests/test_grammar.cpp`.
+- green on g++ and MSVC (24 tests, zero warnings).

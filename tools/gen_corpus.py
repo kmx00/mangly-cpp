@@ -64,6 +64,10 @@ MODS = [
 PREAMBLE = """\
 #include <string>
 #include <vector>
+#include <map>
+#include <memory>
+#include <utility>
+#include <tuple>
 struct TopClass {};
 namespace ns1 {
   struct Inner {};
@@ -349,6 +353,85 @@ def emit_functions() -> list[str]:
         "void take_vstr(std::vector<std::string>) {}",
         "std::basic_string<char>& pick_bstr(std::basic_string<char>& s)"
         " { return s; }",
+    ])
+
+    # 14) REVIEW PHASE 1 diversification: exhaustive builtins, the full operator
+    # table, cv/restrict qualifiers, arrays & member pointers, ref-qualified and
+    # cv member functions, varargs, function-returning-function-pointer, deeply
+    # nested templates, dependent-noexcept (DO), and more std containers.
+    lines.extend([
+        # -- dependent-noexcept function types (DO) --
+        "template <bool B> void ne_dep(void (*)() noexcept(B)) {}",
+        "template void ne_dep<true>(void (*)() noexcept(true));",
+        "template <class T> void ne_dep2(void (*)() noexcept(sizeof(T) > 0)) {}",
+        "template void ne_dep2<int>(void (*)() noexcept(sizeof(int) > 0));",
+        # -- every builtin type as a parameter --
+        "void b_all(wchar_t, char16_t, char32_t, signed char, unsigned char,"
+        " unsigned short, long long, unsigned long long, long double) {}",
+        "void b_ext(__int128, unsigned __int128, __float128) {}",
+        "void b_more(bool, short, unsigned int, unsigned long) {}",
+        # -- full operator table (free functions on a POD) --
+        "struct Op { int v; };",
+        "Op operator%(Op, Op) { return {}; }",
+        "Op operator^(Op, Op) { return {}; }",
+        "Op operator&(Op, Op) { return {}; }",
+        "Op operator|(Op, Op) { return {}; }",
+        "Op operator~(Op) { return {}; }",
+        "bool operator!(Op) { return false; }",
+        "Op operator<<(Op, int) { return {}; }",
+        "Op operator>>(Op, int) { return {}; }",
+        "Op& operator+=(Op& a, Op) { return a; }",
+        "Op& operator-=(Op& a, Op) { return a; }",
+        "Op& operator*=(Op& a, Op) { return a; }",
+        "Op& operator/=(Op& a, Op) { return a; }",
+        "Op& operator%=(Op& a, Op) { return a; }",
+        "Op& operator^=(Op& a, Op) { return a; }",
+        "Op& operator&=(Op& a, Op) { return a; }",
+        "Op& operator|=(Op& a, Op) { return a; }",
+        "Op& operator<<=(Op& a, int) { return a; }",
+        "Op& operator>>=(Op& a, int) { return a; }",
+        "bool operator<=(Op, Op) { return false; }",
+        "bool operator>=(Op, Op) { return false; }",
+        "bool operator&&(Op, Op) { return false; }",
+        "bool operator||(Op, Op) { return false; }",
+        "Op& operator--(Op& a) { return a; }",
+        "Op operator--(Op& a, int) { (void)a; return {}; }",
+        "Op* operator,(Op, Op) { return nullptr; }",
+        # -- cv / restrict qualifiers --
+        "void cv_ptrs(const int*, volatile int*, const volatile int*) {}",
+        "void cv_restrict(int* __restrict, const char* __restrict) {}",
+        # -- arrays: pointer-to-array, array-of-pointers, ref-to-array --
+        "void arr_p2a(int (*)[3][4]) {}",
+        "void arr_aop(char* (*)[5]) {}",
+        "void arr_r2a(int (&)[10]) {}",
+        # -- member data / function pointers --
+        "struct MC { int m; void f(int); long g(char) const; };",
+        "void mp_data(int MC::*) {}",
+        "void mp_fn(void (MC::*)(int)) {}",
+        "void mp_cfn(long (MC::*)(char) const) {}",
+        # -- ref-qualified and cv member functions --
+        "struct RQ { void lref() &; void rref() &&; void cf() const;"
+        " void vf() volatile; void cvf() const volatile; };",
+        "void RQ::lref() & {}",
+        "void RQ::rref() && {}",
+        "void RQ::cf() const {}",
+        "void RQ::vf() volatile {}",
+        "void RQ::cvf() const volatile {}",
+        # -- perfect forwarding (rvalue ref collapse) --
+        "template <class T> void fwd(T&&) {}",
+        "template void fwd<int&>(int&);",
+        "template void fwd<int>(int&&);",
+        # -- varargs ellipsis + function returning function pointer --
+        "void va_fn(int, ...) {}",
+        "void (*ret_fp())(int, char) { return nullptr; }",
+        # -- deeply nested templates + deep namespace --
+        "void nested_tmpl(Box<Box<Box<int> > >) {}",
+        "void deep_ns(ns1::ns2::ns3::Deeper) {}",
+        # -- more std containers --
+        "void s_map(std::map<int, std::string>) {}",
+        "void s_pair(std::pair<int, double>) {}",
+        "void s_shared(std::shared_ptr<int>) {}",
+        "void s_tuple(std::tuple<int, char, double>) {}",
     ])
 
     return lines

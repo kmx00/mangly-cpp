@@ -85,6 +85,15 @@ const std::pair<const char*, const char*> kCases[] = {
     {"_Z7take_nePDoFvvE", "take_ne(void (*)() noexcept)"},
     {"_Z3tfnIiEvPDoFT_vE", "tfn<int>(int (*)() noexcept)"},
     {"_ZGR8ref_temp_", "reference temporary #0 for ref_temp"},
+    // review phase 1: member ptr to cv fn, multi-dim array behind pointer,
+    // exhaustive builtins, dependent-noexcept (DO), varargs
+    {"_Z6mp_cfnM2MCKFlcE", "mp_cfn(long (MC::*)(char) const)"},
+    {"_Z7arr_p2aPA3_A4_i", "arr_p2a(int (*)[3][4])"},
+    {"_Z6ne_depILb1EEvPDOT_EFvvE", "ne_dep<true>(void (*)() noexcept(true))"},
+    {"_Z5va_fniz", "va_fn(int,...)"},
+    {"_Z5b_allwDsDiahtxye",
+     "b_all(wchar_t,char16_t,char32_t,signed char,unsigned char,unsigned short,"
+     "long long,unsigned long long,long double)"},
 };
 }  // namespace
 

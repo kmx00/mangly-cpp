@@ -378,12 +378,18 @@ inline void render_indirection(const Node* target, const char* op, OutputBuffer&
         render_params(target->func_type.params, target->func_type.nparams, o);
         render_fn_except(target, o);
     } else if (target->kind == Kind::Array) {
-        render(target->array.inner, o);
+        // pointer/ref to a (possibly multi-dimensional) array: elem (op)[d0][d1]
+        const Node* base = target;
+        while (base->kind == Kind::Array) base = base->array.inner;
+        render(base, o);
         o.append(" (");
         o.append(op);
-        o.append(")[");
-        if (target->array.has_dim) o.append(target->array.dim);
-        o.push(']');
+        o.push(')');
+        for (const Node* a = target; a->kind == Kind::Array; a = a->array.inner) {
+            o.push('[');
+            if (a->array.has_dim) o.append(a->array.dim);
+            o.push(']');
+        }
     } else {
         render(target, o);
         o.push(' ');
@@ -467,20 +473,38 @@ inline void render(const Node* n, OutputBuffer& o) {
             return;
         case Kind::MemberPointer: {
             const Node* pt = n->memptr.pointee;
-            if (pt->kind == Kind::FunctionType) {
-                render(pt->func_type.ret, o);
+            // A pointer-to-member of a cv-qualified member function: the cv on
+            // `this` is a CVQualified wrapping the FunctionType -> render trailing.
+            const Node* fpt = pt;
+            StringView fn_cv{};
+            if (pt->kind == Kind::CVQualified &&
+                pt->cv.inner->kind == Kind::FunctionType) {
+                fpt = pt->cv.inner;
+                fn_cv = pt->cv.quals;
+            }
+            if (fpt->kind == Kind::FunctionType) {
+                render(fpt->func_type.ret, o);
                 o.append(" (");
                 render(n->memptr.cls, o);
                 o.append("::*)");
-                render_params(pt->func_type.params, pt->func_type.nparams, o);
-                render_fn_except(pt, o);
+                render_params(fpt->func_type.params, fpt->func_type.nparams, o);
+                render_fn_except(fpt, o);
+                for (std::uint32_t i = 0; i < fn_cv.size; ++i) {
+                    o.push(' ');
+                    o.append(cv_name(fn_cv.data[i]));
+                }
             } else if (pt->kind == Kind::Array) {
-                render(pt->array.inner, o);
+                const Node* base = pt;
+                while (base->kind == Kind::Array) base = base->array.inner;
+                render(base, o);
                 o.append(" (");
                 render(n->memptr.cls, o);
-                o.append("::*)[");
-                if (pt->array.has_dim) o.append(pt->array.dim);
-                o.push(']');
+                o.append("::*)");
+                for (const Node* a = pt; a->kind == Kind::Array; a = a->array.inner) {
+                    o.push('[');
+                    if (a->array.has_dim) o.append(a->array.dim);
+                    o.push(']');
+                }
             } else {
                 render(pt, o);
                 o.push(' ');

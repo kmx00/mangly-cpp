@@ -88,3 +88,10 @@ TEST(cli_unrecognized_option_errors) {
     CHECK_EQ(r.code, 2);
     CHECK(testing::contains(r.err, "unrecognized arguments: --nope"));
 }
+
+TEST(cli_version_flag) {
+    Run r = run_cli({"mangly", "--version"}, {}, false);
+    CHECK_EQ(r.code, 0);
+    CHECK(testing::contains(r.out, "mangly "));
+    CHECK(testing::contains(r.out, mangly::version));
+}
