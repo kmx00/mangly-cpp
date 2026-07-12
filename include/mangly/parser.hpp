@@ -53,8 +53,29 @@ inline std::uint32_t from_base36(StringView s) {
 
 class Parser {
 public:
-    Parser(const char* s, std::uint32_t n, Arena& arena)
-        : s_(s), n_(n), arena_(arena) {}
+    // Arena-only: the Parser can be reused across many inputs (subs_/scratch_
+    // keep their capacity), so a Demangler constructs it once. The legacy
+    // (s, n, arena) form is preserved as a delegating ctor for the free parse().
+    explicit Parser(Arena& arena) : arena_(arena) {}
+    Parser(const char* s, std::uint32_t n, Arena& arena) : arena_(arena) {
+        reset_input(s, n);
+    }
+
+    // Point the parser at a new input, rewinding all per-parse scratch state.
+    // subs_ / scratch_ retain their allocated capacity for reuse.
+    void reset_input(const char* s, std::uint32_t n) {
+        s_ = s;
+        n_ = n;
+        i_ = 0;
+        failed_ = false;
+        error_ = nullptr;
+        subs_.clear();
+        scratch_.clear();
+        pending_cv_ = StringView{};
+        pending_ref_ = 0;
+        cur_targs_ = nullptr;
+        cur_ntargs_ = 0;
+    }
 
     // Returns the root node, or nullptr on failure.
     const Node* parse() {
@@ -323,16 +344,39 @@ private:
         return n;
     }
 
-    // Copy a scratch pointer list into a stable arena array (nullptr if empty).
-    const Node* const* dup(const Vec<const Node*>& v) {
-        std::uint32_t count = v.size();
+    // A scratch frame: a slice of the shared scratch_ stack. Construct one where
+    // a production formerly declared a local Vec, push children into it, then
+    // dup() it into the arena. On scope exit the frame pops itself, so nesting
+    // (parse_type -> parse_function_type -> parse_type ...) just stacks slices
+    // in one buffer. Non-copyable so the pop happens exactly once.
+    class Frame {
+    public:
+        explicit Frame(Vec<const Node*>& s) : s_(s), mark_(s.size()) {}
+        ~Frame() { s_.truncate(mark_); }
+        Frame(const Frame&) = delete;
+        Frame& operator=(const Frame&) = delete;
+        bool push(const Node* n) { return s_.push(n); }
+        std::uint32_t size() const { return s_.size() - mark_; }
+        const Node* operator[](std::uint32_t i) const { return s_[mark_ + i]; }
+        bool failed() const { return s_.failed(); }
+        std::uint32_t mark() const { return mark_; }
+
+    private:
+        Vec<const Node*>& s_;
+        std::uint32_t mark_;
+    };
+
+    // Copy a scratch frame into a stable arena array (nullptr if empty). Must be
+    // called while the frame is live (before it pops).
+    const Node* const* dup(const Frame& f) {
+        std::uint32_t count = f.size();
         if (count == 0) return nullptr;
         const Node** arr = arena_.alloc<const Node*>(count);
         if (!arr) {
             fail("out of memory");
             return nullptr;
         }
-        std::memcpy(arr, v.data(), sizeof(const Node*) * count);
+        std::memcpy(arr, scratch_.data() + f.mark(), sizeof(const Node*) * count);
         return arr;
     }
 
@@ -455,7 +499,7 @@ private:
         take();  // 'U'
         char t = take();
         if (t == 'l') {
-            Vec<const Node*> params;
+            Frame params(scratch_);
             while (peek() != 'E') {
                 if (at_end()) return fail("unterminated lambda");
                 const Node* p = parse_type();
@@ -513,7 +557,7 @@ private:
             if (!ret) return nullptr;
         }
 
-        Vec<const Node*> params;
+        Frame params(scratch_);
         while (!at_end() && !(stop_at_e && peek() == 'E')) {
             const Node* p = parse_type();
             if (!p) return nullptr;
@@ -707,7 +751,7 @@ private:
         count = 0;
         expect('I');
         if (failed_) return nullptr;
-        Vec<const Node*> args;
+        Frame args(scratch_);
         while (peek() != 'E') {
             if (at_end()) {
                 fail("unterminated template-args");
@@ -736,7 +780,7 @@ private:
         }
         if (peek() == 'J') {  // argument pack: J <template-arg>* E
             take();
-            Vec<const Node*> elems;
+            Frame elems(scratch_);
             while (peek() != 'E') {
                 if (at_end()) return fail("unterminated argument pack");
                 const Node* e = parse_template_arg();
@@ -979,7 +1023,7 @@ private:
         if (peek() == 'Y') take();  // extern "C" flag (ignored, rare)
         const Node* ret = parse_type();
         if (!ret) return nullptr;
-        Vec<const Node*> params;
+        Frame params(scratch_);
         while (peek() != 'E') {
             if (at_end()) return fail("unterminated function type");
             const Node* p = parse_type();
@@ -1127,7 +1171,7 @@ private:
         if (arity > 0) {
             StringView op{s_ + i_, 2};
             i_ += 2;
-            Vec<const Node*> ops;
+            Frame ops(scratch_);
             for (int k = 0; k < arity; ++k) {
                 const Node* e = parse_expression();
                 if (!e) return nullptr;
@@ -1145,7 +1189,7 @@ private:
         StringView op{s_ + i_, 2};
         i_ += 2;
         (void)code;
-        Vec<const Node*> ops;
+        Frame ops(scratch_);
         const Node* first = type0 ? parse_type() : parse_expression();
         if (!first) return nullptr;
         ops.push(first);
@@ -1163,7 +1207,7 @@ private:
         StringView op{s_ + i_, 2};
         i_ += 2;
         (void)code;
-        Vec<const Node*> ops;
+        Frame ops(scratch_);
         if (type0) {
             const Node* t = parse_type();
             if (!t) return nullptr;
@@ -1202,11 +1246,16 @@ private:
         return sub_at(detail::from_base36(seq) + 1);
     }
 
-    const char* s_;
-    std::uint32_t n_;
+    const char* s_ = nullptr;
+    std::uint32_t n_ = 0;
     std::uint32_t i_ = 0;
     Arena& arena_;
     Vec<const Node*> subs_;
+    // Shared scratch stack for building child-pointer lists. Productions push a
+    // Frame (see below), fill it, dup() it into the arena, and the Frame pops on
+    // scope exit -- one realloc-growable buffer reused for every list, instead
+    // of a fresh malloc/free per production.
+    Vec<const Node*> scratch_;
     bool failed_ = false;
     const char* error_ = nullptr;
     // Scratch for the current nested-name's this-qualifiers, published on the
